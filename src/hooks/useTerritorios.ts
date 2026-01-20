@@ -2,8 +2,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
 import { useToast } from '@/hooks/use-toast';
-import { saveToLocalStorage, getFromLocalStorage, addPendingChange } from '@/lib/offlineStorage';
+import { saveToLocalStorage, getFromLocalStorage } from '@/lib/offlineStorage';
 import type { Polygon } from 'geojson';
+import type { Json } from '@/integrations/supabase/types';
 
 export function useTerritorios() {
   const queryClient = useQueryClient();
@@ -40,9 +41,9 @@ export function useTerritorios() {
         .from('territorios')
         .insert({
           numero: territorio.numero,
-          nombre: territorio.nombre,
-          geometria_poligono: territorio.geometria_poligono as unknown as Record<string, unknown>,
-          created_by: territorio.created_by,
+          nombre: territorio.nombre || null,
+          geometria_poligono: JSON.parse(JSON.stringify(territorio.geometria_poligono)) as Json,
+          created_by: territorio.created_by || null,
         })
         .select()
         .single();
