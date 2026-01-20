@@ -4,17 +4,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTerritorios } from '@/hooks/useTerritorios';
 import { useObservaciones } from '@/hooks/useObservaciones';
 import { TerritoryMap } from '@/components/map/TerritoryMap';
-import TerritoryList from '@/components/territory/TerritoryList';
-import TerritoryDetails from '@/components/territory/TerritoryDetails';
-import UserMenu from '@/components/layout/UserMenu';
-import OfflineIndicator from '@/components/layout/OfflineIndicator';
-import CreateTerritorioForm from '@/components/territory/CreateTerritorioForm';
-import ObservacionForm from '@/components/territory/ObservacionForm';
+import { TerritoryList } from '@/components/territory/TerritoryList';
+import { TerritoryDetails } from '@/components/territory/TerritoryDetails';
+import { UserMenu } from '@/components/layout/UserMenu';
+import { OfflineIndicator } from '@/components/layout/OfflineIndicator';
+import { CreateTerritorioForm } from '@/components/territory/CreateTerritorioForm';
+import { ObservacionForm } from '@/components/territory/ObservacionForm';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
-import { toast } from 'sonner';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
 import type { Polygon } from 'geojson';
 import { MapPin, List, Plus, Loader2, PenTool } from 'lucide-react';
@@ -22,7 +19,6 @@ import { MapPin, List, Plus, Loader2, PenTool } from 'lucide-react';
 const Index = () => {
   const navigate = useNavigate();
   const { user, isLoading: authLoading, isAdmin } = useAuth();
-  const isOnline = useOnlineStatus();
 
   const { territorios, isLoading: territoriosLoading, createTerritorio, updateEstado } = useTerritorios();
   const [selectedTerritorio, setSelectedTerritorio] = useState<Territorio | null>(null);
@@ -54,20 +50,20 @@ const Index = () => {
     setShowCreateDialog(true);
   }, []);
 
-  const handlePinPlaced = useCallback((coords: { lat: number; lng: number }) => {
+  const handlePinPlaced = useCallback((coords: { lat: number; lng: number }, territorioId: string) => {
     setPendingPinCoords(coords);
     setIsPinMode(false);
     setShowObservacionDialog(true);
   }, []);
 
-  const handleCreateTerritorio = async (data: { numero: number; nombre?: string }) => {
-    if (!pendingPolygon || !user) return;
+  const handleCreateTerritorio = async (data: { numero: number; nombre?: string; geometria_poligono: Polygon }) => {
+    if (!user) return;
 
     try {
       await createTerritorio.mutateAsync({
         numero: data.numero,
         nombre: data.nombre,
-        geometria_poligono: pendingPolygon,
+        geometria_poligono: data.geometria_poligono,
         created_by: user.id,
       });
       setShowCreateDialog(false);
@@ -93,11 +89,13 @@ const Index = () => {
     }
   };
 
-  const handleEstadoChange = async (id: string, estado: TerritorioEstado) => {
+  const handleEstadoChange = async (estado: TerritorioEstado) => {
+    if (!selectedTerritorio) return;
+    
     try {
-      await updateEstado.mutateAsync({ id, estado });
+      await updateEstado.mutateAsync({ id: selectedTerritorio.id, estado });
       setSelectedTerritorio((prev) =>
-        prev?.id === id ? { ...prev, estado } : prev
+        prev ? { ...prev, estado } : prev
       );
     } catch (error) {
       console.error(error);
@@ -113,6 +111,8 @@ const Index = () => {
   }
 
   if (!user) return null;
+
+  const existingNumbers = territorios.map((t) => t.numero);
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
@@ -145,7 +145,7 @@ const Index = () => {
           selectedTerritorio={selectedTerritorio}
           onSelectTerritorio={handleTerritorioClick}
           onPolygonCreated={handlePolygonCreated}
-          onAddObservacion={(coords) => handlePinPlaced(coords)}
+          onAddObservacion={handlePinPlaced}
           isDrawingMode={isDrawingMode}
           isAddingPin={isPinMode}
         />
@@ -177,63 +177,46 @@ const Index = () => {
           <SheetContent side="left" className="w-80 p-0">
             <TerritoryList
               territorios={territorios}
-              selectedId={selectedTerritorio?.id}
-              onSelect={handleTerritorioClick}
+              selectedTerritorio={selectedTerritorio}
+              onSelectTerritorio={(t) => handleTerritorioClick(t)}
             />
           </SheetContent>
         </Sheet>
 
         {/* Territory Details Panel */}
         {selectedTerritorio && (
-          <div className="absolute bottom-4 right-4 z-10 w-80">
+          <div className="absolute bottom-4 right-4 z-10 w-80 max-h-[70vh] overflow-auto rounded-lg border bg-card shadow-lg">
             <TerritoryDetails
               territorio={selectedTerritorio}
-              observaciones={observaciones}
-              isAdmin={isAdmin}
               onClose={() => setSelectedTerritorio(null)}
-              onEstadoChange={handleEstadoChange}
+              onChangeEstado={handleEstadoChange}
               onAddPin={() => setIsPinMode(true)}
+              isAddingPin={isPinMode}
+              observacionesCount={observaciones.length}
             />
           </div>
         )}
       </div>
 
       {/* Create Territorio Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Crear Nuevo Territorio</DialogTitle>
-          </DialogHeader>
-          <CreateTerritorioForm
-            onSubmit={handleCreateTerritorio}
-            onCancel={() => {
-              setShowCreateDialog(false);
-              setPendingPolygon(null);
-            }}
-            isLoading={createTerritorio.isPending}
-          />
-        </DialogContent>
-      </Dialog>
+      <CreateTerritorioForm
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onSubmit={handleCreateTerritorio}
+        geometria={pendingPolygon}
+        existingNumbers={existingNumbers}
+      />
 
       {/* Create Observacion Dialog */}
-      <Dialog open={showObservacionDialog} onOpenChange={setShowObservacionDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Agregar Observación</DialogTitle>
-          </DialogHeader>
-          <ObservacionForm
-            onSubmit={handleCreateObservacion}
-            onCancel={() => {
-              setShowObservacionDialog(false);
-              setPendingPinCoords(null);
-            }}
-            isLoading={createObservacion.isPending}
-          />
-        </DialogContent>
-      </Dialog>
+      <ObservacionForm
+        open={showObservacionDialog}
+        onOpenChange={setShowObservacionDialog}
+        onSubmit={handleCreateObservacion}
+        coords={pendingPinCoords}
+      />
 
       {/* Offline Indicator */}
-      {!isOnline && <OfflineIndicator />}
+      <OfflineIndicator />
     </div>
   );
 };
