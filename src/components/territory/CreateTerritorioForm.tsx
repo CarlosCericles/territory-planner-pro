@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -65,14 +66,17 @@ export function CreateTerritorioForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md bg-card text-card-foreground border-border">
         <DialogHeader>
-          <DialogTitle>Crear nuevo territorio</DialogTitle>
+          <DialogTitle className="text-foreground">Crear nuevo territorio</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Ingresa los datos del territorio dibujado en el mapa.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="numero">Número de territorio *</Label>
+              <Label htmlFor="numero" className="text-foreground">Número de territorio *</Label>
               <Input
                 id="numero"
                 type="number"
@@ -80,17 +84,19 @@ export function CreateTerritorioForm({
                 onChange={(e) => setNumero(e.target.value)}
                 placeholder={`Sugerido: ${suggestedNumber}`}
                 min={1}
+                className="bg-background text-foreground border-input"
               />
               {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre (opcional)</Label>
+              <Label htmlFor="nombre" className="text-foreground">Nombre (opcional)</Label>
               <Input
                 id="nombre"
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
                 placeholder="Ej: Centro, Barrio Norte..."
+                className="bg-background text-foreground border-input"
               />
             </div>
 
@@ -107,7 +113,7 @@ export function CreateTerritorioForm({
               Cancelar
             </Button>
             <Button type="submit">
-              Crear territorio
+              Guardar Territorio
             </Button>
           </DialogFooter>
         </form>
