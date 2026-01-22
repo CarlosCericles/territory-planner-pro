@@ -4,14 +4,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTerritorios } from '@/hooks/useTerritorios';
 import { useObservaciones } from '@/hooks/useObservaciones';
 import { TerritoryMap } from '@/components/map/TerritoryMap';
-import { TerritoryList } from '@/components/territory/TerritoryList';
 import { TerritoryDetails } from '@/components/territory/TerritoryDetails';
+import { TerritorySidebar } from '@/components/layout/TerritorySidebar';
 import { UserMenu } from '@/components/layout/UserMenu';
 import { OfflineIndicator } from '@/components/layout/OfflineIndicator';
 import { CreateTerritorioForm } from '@/components/territory/CreateTerritorioForm';
 import { ObservacionForm } from '@/components/territory/ObservacionForm';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
 import type { Polygon } from 'geojson';
 import { MapPin, List, Plus, Loader2, PenTool } from 'lucide-react';
@@ -22,11 +21,14 @@ const Index = () => {
 
   const { territorios, isLoading: territoriosLoading, createTerritorio, updateEstado } = useTerritorios();
   const [selectedTerritorio, setSelectedTerritorio] = useState<Territorio | null>(null);
+  
+  // Fetch all observaciones (no filter) for sidebar, and filtered ones for selected territory
+  const { observaciones: allObservaciones } = useObservaciones();
   const { observaciones, createObservacion } = useObservaciones(selectedTerritorio?.id);
 
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isPinMode, setIsPinMode] = useState(false);
-  const [showListSheet, setShowListSheet] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showObservacionDialog, setShowObservacionDialog] = useState(false);
   const [pendingPolygon, setPendingPolygon] = useState<Polygon | null>(null);
@@ -41,7 +43,6 @@ const Index = () => {
 
   const handleTerritorioClick = useCallback((territorio: Territorio | null) => {
     setSelectedTerritorio(territorio);
-    setShowListSheet(false);
   }, []);
 
   const handlePolygonCreated = useCallback((geojson: Polygon) => {
@@ -166,22 +167,25 @@ const Index = () => {
           </div>
         )}
 
-        {/* Floating List Button */}
-        <Sheet open={showListSheet} onOpenChange={setShowListSheet}>
-          <SheetTrigger asChild>
-            <Button className="absolute bottom-4 left-4 z-10 shadow-lg" size="lg">
-              <List className="mr-2 h-5 w-5" />
-              Territorios
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-80 p-0">
-            <TerritoryList
-              territorios={territorios}
-              selectedTerritorio={selectedTerritorio}
-              onSelectTerritorio={(t) => handleTerritorioClick(t)}
-            />
-          </SheetContent>
-        </Sheet>
+        {/* Floating Sidebar Toggle Button */}
+        <Button 
+          className="absolute bottom-4 left-4 z-10 shadow-lg" 
+          size="lg"
+          onClick={() => setShowSidebar(true)}
+        >
+          <List className="mr-2 h-5 w-5" />
+          Territorios
+        </Button>
+
+        {/* Territory Sidebar */}
+        <TerritorySidebar
+          territorios={territorios}
+          observaciones={allObservaciones}
+          selectedTerritorio={selectedTerritorio}
+          onSelectTerritorio={handleTerritorioClick}
+          isOpen={showSidebar}
+          onClose={() => setShowSidebar(false)}
+        />
 
         {/* Territory Details Panel */}
         {selectedTerritorio && (
