@@ -80,6 +80,7 @@ export type Database = {
           estado: Database["public"]["Enums"]["territorio_estado"]
           geometria_poligono: Json
           id: string
+          lados_completados: number[] | null
           nombre: string | null
           numero: number
           ultima_fecha_completado: string | null
@@ -91,6 +92,7 @@ export type Database = {
           estado?: Database["public"]["Enums"]["territorio_estado"]
           geometria_poligono: Json
           id?: string
+          lados_completados?: number[] | null
           nombre?: string | null
           numero: number
           ultima_fecha_completado?: string | null
@@ -102,6 +104,7 @@ export type Database = {
           estado?: Database["public"]["Enums"]["territorio_estado"]
           geometria_poligono?: Json
           id?: string
+          lados_completados?: number[] | null
           nombre?: string | null
           numero?: number
           ultima_fecha_completado?: string | null
