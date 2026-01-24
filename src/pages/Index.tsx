@@ -169,7 +169,7 @@ const Index = () => {
 
         {/* Floating Sidebar Toggle Button */}
         <Button 
-          className="absolute bottom-4 left-4 z-10 shadow-lg" 
+          className="absolute bottom-4 left-4 z-[1000] shadow-xl" 
           size="lg"
           onClick={() => setShowSidebar(true)}
         >
@@ -189,7 +189,7 @@ const Index = () => {
 
         {/* Territory Details Panel */}
         {selectedTerritorio && (
-          <div className="absolute bottom-4 right-4 z-10 w-80 max-h-[70vh] overflow-auto rounded-lg border bg-card shadow-lg">
+          <div className="absolute bottom-4 right-4 z-[1000] w-80 max-h-[70vh] overflow-auto rounded-lg border bg-card shadow-xl">
             <TerritoryDetails
               territorio={selectedTerritorio}
               onClose={() => setSelectedTerritorio(null)}
