@@ -13,6 +13,7 @@ import {
   Edit2,
   Trash2,
   Calendar,
+  Pencil,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -22,9 +23,11 @@ interface TerritoryDetailsProps {
   onClose: () => void;
   onChangeEstado: (estado: TerritorioEstado) => void;
   onAddPin: () => void;
+  onToggleEdgeEdit: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   isAddingPin: boolean;
+  isEdgeEditMode: boolean;
   observacionesCount: number;
 }
 
@@ -48,13 +51,17 @@ export function TerritoryDetails({
   onClose,
   onChangeEstado,
   onAddPin,
+  onToggleEdgeEdit,
   onEdit,
   onDelete,
   isAddingPin,
+  isEdgeEditMode,
   observacionesCount,
 }: TerritoryDetailsProps) {
   const { isAdmin } = useAuth();
   const config = estadoConfig[territorio.estado];
+  const ladosCompletados = territorio.lados_completados || [];
+  const totalLados = territorio.geometria_poligono.coordinates[0].length - 1;
 
   return (
     <div className="flex h-full flex-col">
@@ -154,6 +161,27 @@ export function TerritoryDetails({
             )}
           </div>
         </div>
+
+        {/* Marcar lados - solo visible cuando está en estado "iniciado" */}
+        {territorio.estado === 'iniciado' && (
+          <>
+            <Separator className="my-4" />
+            <div className="mb-4">
+              <p className="mb-2 text-sm font-medium">Progreso de lados</p>
+              <p className="text-sm text-muted-foreground mb-3">
+                {ladosCompletados.length} de {totalLados} lados completados
+              </p>
+              <Button
+                variant={isEdgeEditMode ? 'default' : 'outline'}
+                className="w-full touch-btn"
+                onClick={onToggleEdgeEdit}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                {isEdgeEditMode ? 'Terminar edición de lados' : 'Marcar lados hechos'}
+              </Button>
+            </div>
+          </>
+        )}
 
         <Separator className="my-4" />
 

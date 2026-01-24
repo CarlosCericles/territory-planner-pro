@@ -9,6 +9,7 @@ export interface Territorio {
   geometria_poligono: Polygon;
   estado: TerritorioEstado;
   ultima_fecha_completado: string | null;
+  lados_completados: number[];
   created_by: string | null;
   created_at: string;
   updated_at: string;

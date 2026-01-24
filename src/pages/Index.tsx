@@ -28,6 +28,7 @@ const Index = () => {
 
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isPinMode, setIsPinMode] = useState(false);
+  const [isEdgeEditMode, setIsEdgeEditMode] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showObservacionDialog, setShowObservacionDialog] = useState(false);
@@ -94,14 +95,41 @@ const Index = () => {
     if (!selectedTerritorio) return;
     
     try {
-      await updateEstado.mutateAsync({ id: selectedTerritorio.id, estado });
-      setSelectedTerritorio((prev) =>
-        prev ? { ...prev, estado } : prev
-      );
+      const result = await updateEstado.mutateAsync({ id: selectedTerritorio.id, estado });
+      setSelectedTerritorio(result);
+      // Disable edge edit mode when changing to pendiente or completado
+      if (estado !== 'iniciado') {
+        setIsEdgeEditMode(false);
+      }
     } catch (error) {
       console.error(error);
     }
   };
+
+  const handleToggleEdge = useCallback(async (territorioId: string, edgeIndex: number) => {
+    const territorio = territorios.find(t => t.id === territorioId);
+    if (!territorio) return;
+
+    const currentLados = territorio.lados_completados || [];
+    let newLados: number[];
+    
+    if (currentLados.includes(edgeIndex)) {
+      newLados = currentLados.filter(i => i !== edgeIndex);
+    } else {
+      newLados = [...currentLados, edgeIndex];
+    }
+
+    try {
+      const result = await updateEstado.mutateAsync({
+        id: territorioId,
+        estado: 'iniciado',
+        lados_completados: newLados,
+      });
+      setSelectedTerritorio(result);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [territorios, updateEstado]);
 
   if (authLoading || territoriosLoading) {
     return (
@@ -147,8 +175,10 @@ const Index = () => {
           onSelectTerritorio={handleTerritorioClick}
           onPolygonCreated={handlePolygonCreated}
           onAddObservacion={handlePinPlaced}
+          onToggleEdge={handleToggleEdge}
           isDrawingMode={isDrawingMode}
           isAddingPin={isPinMode}
+          isEdgeEditMode={isEdgeEditMode}
         />
 
         {/* Drawing Mode Indicator */}
@@ -167,7 +197,13 @@ const Index = () => {
           </div>
         )}
 
-        {/* Floating Sidebar Toggle Button */}
+        {/* Edge Edit Mode Indicator */}
+        {isEdgeEditMode && (
+          <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-lg">
+            <PenTool className="mr-2 inline h-4 w-4" />
+            Toca un lado del polígono para marcarlo como hecho
+          </div>
+        )}
         <Button 
           className="absolute bottom-4 left-4 z-[2000] shadow-xl" 
           size="lg"
@@ -193,10 +229,15 @@ const Index = () => {
           <div className="absolute bottom-4 right-4 z-[1000] w-80 max-h-[70vh] overflow-auto rounded-lg border bg-card shadow-xl">
             <TerritoryDetails
               territorio={selectedTerritorio}
-              onClose={() => setSelectedTerritorio(null)}
+              onClose={() => {
+                setSelectedTerritorio(null);
+                setIsEdgeEditMode(false);
+              }}
               onChangeEstado={handleEstadoChange}
               onAddPin={() => setIsPinMode(true)}
+              onToggleEdgeEdit={() => setIsEdgeEditMode(!isEdgeEditMode)}
               isAddingPin={isPinMode}
+              isEdgeEditMode={isEdgeEditMode}
               observacionesCount={observaciones.length}
             />
           </div>
