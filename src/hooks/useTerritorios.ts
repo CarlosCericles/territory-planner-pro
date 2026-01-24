@@ -27,6 +27,7 @@ export function useTerritorios() {
       const territorios = data.map(t => ({
         ...t,
         geometria_poligono: t.geometria_poligono as unknown as Polygon,
+        lados_completados: (t.lados_completados as number[]) || [],
       })) as Territorio[];
 
       saveToLocalStorage('territorios', territorios);
@@ -61,10 +62,16 @@ export function useTerritorios() {
   });
 
   const updateEstado = useMutation({
-    mutationFn: async ({ id, estado }: { id: string; estado: TerritorioEstado }) => {
+    mutationFn: async ({ id, estado, lados_completados }: { id: string; estado: TerritorioEstado; lados_completados?: number[] }) => {
       const updates: Record<string, unknown> = { estado };
       if (estado === 'completado') {
         updates.ultima_fecha_completado = new Date().toISOString();
+      }
+      if (estado === 'pendiente') {
+        updates.lados_completados = [];
+      }
+      if (lados_completados !== undefined) {
+        updates.lados_completados = lados_completados;
       }
 
       const { data, error } = await supabase
@@ -75,7 +82,11 @@ export function useTerritorios() {
         .single();
 
       if (error) throw error;
-      return { ...data, geometria_poligono: data.geometria_poligono as unknown as Polygon } as Territorio;
+      return { 
+        ...data, 
+        geometria_poligono: data.geometria_poligono as unknown as Polygon,
+        lados_completados: (data.lados_completados as number[]) || [],
+      } as Territorio;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['territorios'] });

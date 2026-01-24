@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '@geoman-io/leaflet-geoman-free';
@@ -17,8 +17,10 @@ interface TerritoryMapProps {
   onSelectTerritorio: (territorio: Territorio | null) => void;
   onPolygonCreated?: (geojson: Polygon) => void;
   onAddObservacion?: (coords: { lat: number; lng: number }, territorioId: string) => void;
+  onToggleEdge?: (territorioId: string, edgeIndex: number) => void;
   isDrawingMode?: boolean;
   isAddingPin?: boolean;
+  isEdgeEditMode?: boolean;
 }
 
 const getEstadoColor = (estado: TerritorioEstado): string => {
@@ -30,6 +32,9 @@ const getEstadoColor = (estado: TerritorioEstado): string => {
   }
 };
 
+const EDGE_COMPLETED_COLOR = '#22c55e';
+const EDGE_PENDING_COLOR = '#f97316';
+
 export function TerritoryMap({
   territorios,
   observaciones,
@@ -37,12 +42,15 @@ export function TerritoryMap({
   onSelectTerritorio,
   onPolygonCreated,
   onAddObservacion,
+  onToggleEdge,
   isDrawingMode = false,
   isAddingPin = false,
+  isEdgeEditMode = false,
 }: TerritoryMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const polygonsRef = useRef<Map<string, L.Polygon>>(new Map());
+  const edgesRef = useRef<Map<string, L.Polyline[]>>(new Map());
   const labelsRef = useRef<L.Marker[]>([]);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const { isAdmin } = useAuth();
@@ -125,12 +133,16 @@ export function TerritoryMap({
     }
   }, [isAddingPin, selectedTerritorio, onAddObservacion, mapReady]);
 
+  // Render territories with edge coloring for "iniciado" state
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
+    // Clear existing polygons and edges
     polygonsRef.current.forEach((p) => map.removeLayer(p));
     polygonsRef.current.clear();
+    edgesRef.current.forEach((edges) => edges.forEach((e) => map.removeLayer(e)));
+    edgesRef.current.clear();
     labelsRef.current.forEach((l) => map.removeLayer(l));
     labelsRef.current = [];
 
@@ -140,15 +152,66 @@ export function TerritoryMap({
       );
       const color = getEstadoColor(territorio.estado);
       const isSelected = selectedTerritorio?.id === territorio.id;
+      const ladosCompletados = territorio.lados_completados || [];
 
-      const polygon = L.polygon(coordinates, {
-        color,
-        fillColor: color,
-        fillOpacity: isSelected ? 0.5 : 0.3,
-        weight: isSelected ? 3 : 2,
-      }).addTo(map);
+      // For "iniciado" territories, render edges individually
+      if (territorio.estado === 'iniciado') {
+        // Render a transparent polygon for selection
+        const polygon = L.polygon(coordinates, {
+          color: 'transparent',
+          fillColor: color,
+          fillOpacity: isSelected ? 0.3 : 0.15,
+          weight: 0,
+        }).addTo(map);
 
-      const center = polygon.getBounds().getCenter();
+        polygon.on('click', () => onSelectTerritorio(territorio));
+        polygonsRef.current.set(territorio.id, polygon);
+
+        // Render each edge individually
+        const edges: L.Polyline[] = [];
+        for (let i = 0; i < coordinates.length - 1; i++) {
+          const start = coordinates[i];
+          const end = coordinates[i + 1];
+          const isCompleted = ladosCompletados.includes(i);
+          
+          const edgeLine = L.polyline([start, end], {
+            color: isCompleted ? EDGE_COMPLETED_COLOR : EDGE_PENDING_COLOR,
+            weight: isSelected ? 5 : 4,
+            opacity: 1,
+          }).addTo(map);
+
+          // Add click handler for edge editing when in edge edit mode
+          if (isEdgeEditMode && isSelected && onToggleEdge) {
+            edgeLine.setStyle({ weight: 6, opacity: 1 });
+            edgeLine.on('click', (e) => {
+              L.DomEvent.stopPropagation(e);
+              onToggleEdge(territorio.id, i);
+            });
+            edgeLine.bindTooltip(
+              isCompleted ? 'Clic para desmarcar' : 'Clic para marcar como hecho',
+              { permanent: false, direction: 'center' }
+            );
+          }
+
+          edges.push(edgeLine);
+        }
+        edgesRef.current.set(territorio.id, edges);
+      } else {
+        // For "pendiente" and "completado", render normal polygon
+        const polygon = L.polygon(coordinates, {
+          color,
+          fillColor: color,
+          fillOpacity: isSelected ? 0.5 : 0.3,
+          weight: isSelected ? 3 : 2,
+        }).addTo(map);
+
+        polygon.on('click', () => onSelectTerritorio(territorio));
+        polygonsRef.current.set(territorio.id, polygon);
+      }
+
+      // Add label
+      const polygonForCenter = L.polygon(coordinates);
+      const center = polygonForCenter.getBounds().getCenter();
       const label = L.marker(center, {
         icon: L.divIcon({
           className: 'territory-label',
@@ -160,10 +223,8 @@ export function TerritoryMap({
       }).addTo(map);
 
       labelsRef.current.push(label);
-      polygon.on('click', () => onSelectTerritorio(territorio));
-      polygonsRef.current.set(territorio.id, polygon);
     });
-  }, [territorios, selectedTerritorio, onSelectTerritorio, mapReady]);
+  }, [territorios, selectedTerritorio, onSelectTerritorio, isEdgeEditMode, onToggleEdge, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
