@@ -169,7 +169,7 @@ const Index = () => {
 
         {/* Floating Sidebar Toggle Button */}
         <Button 
-          className="absolute bottom-4 left-4 z-[1000] shadow-xl" 
+          className="absolute bottom-4 left-4 z-[2000] shadow-xl" 
           size="lg"
           onClick={() => setShowSidebar(true)}
         >
@@ -183,6 +183,7 @@ const Index = () => {
           observaciones={allObservaciones}
           selectedTerritorio={selectedTerritorio}
           onSelectTerritorio={handleTerritorioClick}
+          onChangeEstado={handleEstadoChange}
           isOpen={showSidebar}
           onClose={() => setShowSidebar(false)}
         />
