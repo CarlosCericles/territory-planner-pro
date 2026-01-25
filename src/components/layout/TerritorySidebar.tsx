@@ -109,13 +109,14 @@ export function TerritorySidebar({
             </div>
           ) : (
             sortedTerritorios.map((territorio) => {
-              const config = estadoConfig[territorio.estado];
+              const estado = territorio.estado || 'pendiente';
+              const config = estadoConfig[estado] || estadoConfig.pendiente;
               const territoryObservaciones = observacionesByTerritorio[territorio.id] || [];
               const isExpanded = expandedTerritorio === territorio.id;
               const isSelected = selectedTerritorio?.id === territorio.id;
 
               return (
-                <div key={territorio.id} className={cn('mb-1 rounded-lg', config.bgClass)}>
+                <div key={territorio.id} className={cn('mb-1 rounded-lg', config?.bgClass || 'bg-gray-500/20')}>
                   {/* Territory header */}
                   <button
                     onClick={() => handleTerritorioClick(territorio)}
