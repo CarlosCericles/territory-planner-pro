@@ -54,7 +54,8 @@ export function TerritoryList({
       <div className="space-y-2 p-2">
         {filteredTerritorios.map((territorio) => {
           const isSelected = selectedTerritorio?.id === territorio.id;
-          const config = estadoConfig[territorio.estado];
+          const estado = territorio.estado || 'pendiente';
+          const config = estadoConfig[estado] || estadoConfig.pendiente;
 
           return (
             <Card
