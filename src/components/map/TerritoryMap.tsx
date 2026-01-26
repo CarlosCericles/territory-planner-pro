@@ -4,14 +4,28 @@ import 'leaflet/dist/leaflet.css';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 
+// Configuración de iconos para evitar que desaparezcan los marcadores
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
+const BERNARDO_DE_IRIGOYEN = { lat: -26.2522, lng: -53.6497 };
+
 export function TerritoryMap({
   territorios = [],
   observaciones = [],
   selectedTerritorio,
   onSelectTerritorio,
   onPolygonCreated,
-  onAddObservacion, // Coincide con Index.tsx
-  onToggleEdge,      // Coincide con Index.tsx
+  onAddObservacion, // Función para el PIN
+  onToggleEdge,      // Función para marcar lados
   isDrawingMode = false,
   isAddingPin = false,
   isEdgeEditMode = false,
@@ -21,108 +35,59 @@ export function TerritoryMap({
   const layersRef = useRef<L.LayerGroup | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
+  // 1. Inicializar el mapa
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
-    const map = L.map(mapContainerRef.current).setView([-26.2522, -53.6497], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    
+    const map = L.map(mapContainerRef.current).setView([BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
     layersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     setMapReady(true);
-    return () => { map.remove(); mapRef.current = null; };
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
   }, []);
 
-  // Manejo de Clics (Para el Pin de Observaciones)
+  // 2. Manejo de clics para Observaciones (Pines)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const handleClick = (e: L.LeafletMouseEvent) => {
+    const handleMapClick = (e: L.LeafletMouseEvent) => {
       if (isAddingPin && onAddObservacion && selectedTerritorio) {
+        console.log("Colocando PIN en:", e.latlng);
         onAddObservacion(e.latlng, selectedTerritorio.id);
       }
     };
 
-    map.on('click', handleClick);
-    return () => { map.off('click', handleClick); };
+    map.on('click', handleMapClick);
+    return () => { map.off('click', handleMapClick); };
   }, [isAddingPin, mapReady, onAddObservacion, selectedTerritorio]);
 
-  // Modo Dibujo
+  // 3. Herramientas de Dibujo (Geoman)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+
     if (isDrawingMode) {
-      map.pm.addControls({ position: 'topleft', drawPolygon: true });
-      map.pm.enableDraw('Polygon');
-      map.on('pm:create', (e: any) => {
-        onPolygonCreated?.(e.layer.toGeoJSON().geometry);
-        map.removeLayer(e.layer);
+      map.pm.addControls({
+        position: 'topleft',
+        drawPolygon: true,
+        drawMarker: false,
+        drawCircle: false,
+        drawPolyline: false,
+        drawRectangle: false,
+        editMode: false,
+        dragMode: false,
+        removalMode: true
       });
-    } else {
-      map.pm.disableDraw();
-      map.pm.removeControls();
-    }
-    return () => { map.off('pm:create'); };
-  }, [isDrawingMode, mapReady]);
+      map.pm.enableDraw('Polygon');
 
-  // Renderizado de Capas (Polígonos, Lados y Pines)
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !layersRef.current) return;
-
-    layersRef.current.clearLayers();
-
-    territorios.forEach((t: any) => {
-      const geo = t.geometria_poligono || t.poligono || t.geometria;
-      if (!geo?.coordinates?.[0]) return;
-
-      try {
-        const coords = geo.coordinates[0].map((c: any) => [c[1], c[0]] as L.LatLngTuple);
-        const isSelected = t.id === selectedTerritorio?.id;
-        const color = t.estado === 'completado' ? '#22c55e' : (t.estado === 'iniciado' ? '#f97316' : '#9ca3af');
-
-        const poly = L.polygon(coords, {
-          color: isSelected ? '#2563eb' : (t.estado === 'completado' ? '#22c55e' : 'transparent'),
-          fillColor: color,
-          fillOpacity: isSelected ? 0.5 : 0.3,
-          weight: isSelected || t.estado === 'completado' ? 4 : 2,
-        }).addTo(layersRef.current!);
-
-        poly.on('click', (e) => {
-          L.DomEvent.stopPropagation(e);
-          onSelectTerritorio(t);
-        });
-
-        // Lógica de Lados (Solo si está seleccionado o iniciado)
-        const hechos = t.lados_completados || [];
-        for (let i = 0; i < coords.length - 1; i++) {
-          const esHecho = hechos.includes(i);
-          const line = L.polyline([coords[i], coords[i + 1]], {
-            color: esHecho ? '#22c55e' : (isSelected ? '#2563eb' : '#9ca3af'),
-            weight: esHecho ? 8 : (isEdgeEditMode && isSelected ? 6 : 3),
-            opacity: esHecho ? 1 : 0.6,
-            dashArray: isEdgeEditMode && isSelected && !esHecho ? '5, 10' : ''
-          }).addTo(layersRef.current!);
-
-          // Si estamos en modo editar lados, cada línea es clickeable
-          if (isEdgeEditMode && isSelected) {
-            line.on('click', (e) => {
-              L.DomEvent.stopPropagation(e);
-              onToggleEdge(t.id, i);
-            });
-          }
-        }
-      } catch (err) { console.error(err); }
-    });
-
-    // Dibujar Pines de observaciones
-    observaciones.forEach((obs: any) => {
-      const coords = obs.coordenadas;
-      if (coords?.lat && coords?.lng) {
-        L.marker([coords.lat, coords.lng]).addTo(layersRef.current!).bindPopup(obs.comentario);
-      }
-    });
-
-  }, [territorios, observaciones, selectedTerritorio, isEdgeEditMode, mapReady]);
-
-  return <div ref={mapContainerRef} className="h-full w-full" style={{ minHeight: '600px', cursor: isAddingPin ? 'crosshair' : (isEdgeEditMode ? 'pointer' : 'grab') }} />;
-}
+      map.on('pm:create', (e: any) => {
+        const geojson = e.layer.toGeoJSON
