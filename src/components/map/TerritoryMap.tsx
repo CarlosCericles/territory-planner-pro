@@ -12,14 +12,16 @@ export function TerritoryMap({
   selectedTerritorio,
   onSelectTerritorio,
   onPolygonCreated,
+  onMapClick, // Nueva prop para los pines de observaciones
   isDrawingMode = false,
+  isAddingObservation = false, // Nueva prop para saber si estamos poniendo un pin
 }: any) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const layersRef = useRef<L.LayerGroup | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
-  // Inicialización
+  // Inicializar mapa
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     const map = L.map(mapContainerRef.current).setView([BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng], 15);
@@ -30,15 +32,32 @@ export function TerritoryMap({
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
-  // Modo Dibujo
+  // Manejar clics en el mapa para Observaciones
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+
+    const handleClick = (e: L.LeafletMouseEvent) => {
+      if (isAddingObservation && onMapClick) {
+        onMapClick(e.latlng);
+      }
+    };
+
+    map.on('click', handleClick);
+    return () => { map.off('click', handleClick); };
+  }, [isAddingObservation, mapReady, onMapClick]);
+
+  // Modo Dibujo Geoman
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
     if (isDrawingMode) {
       map.pm.addControls({ position: 'topleft', drawPolygon: true });
       map.pm.enableDraw('Polygon');
       map.on('pm:create', (e: any) => {
         onPolygonCreated?.(e.layer.toGeoJSON().geometry);
+        map.removeLayer(e.layer); // Quitamos la capa temporal para que la dibuje el useEffect de abajo
       });
     } else {
       map.pm.disableDraw();
@@ -47,7 +66,7 @@ export function TerritoryMap({
     return () => { map.off('pm:create'); };
   }, [isDrawingMode, mapReady]);
 
-  // Renderizado de Datos
+  // Renderizado de Polígonos, Lados y Pins
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
@@ -55,7 +74,6 @@ export function TerritoryMap({
     layersRef.current.clearLayers();
 
     territorios.forEach((t: any) => {
-      // Intenta obtener geometría de cualquier fuente
       const geo = t.geometria || t.poligono || t.geometria_poligono;
       if (!geo?.coordinates?.[0]) return;
 
@@ -64,14 +82,15 @@ export function TerritoryMap({
         const isSelected = t.id === selectedTerritorio?.id;
         const estado = t.estado || 'pendiente';
         
-        // Colores: Verde (Completado), Naranja (Iniciado), Gris (Pendiente), Azul (Seleccionado)
-        const color = estado === 'completado' ? '#22c55e' : (estado === 'iniciado' ? '#f97316' : '#9ca3af');
+        // Color por estado: Verde (completado), Naranja (iniciado), Gris (pendiente)
+        const mainColor = estado === 'completado' ? '#22c55e' : (estado === 'iniciado' ? '#f97316' : '#9ca3af');
 
+        // Polígono Principal
         const poly = L.polygon(coords, {
-          color: estado === 'completado' ? '#22c55e' : (isSelected ? '#2563eb' : 'transparent'),
-          fillColor: color,
-          fillOpacity: isSelected ? 0.6 : 0.3,
-          weight: isSelected || estado === 'completado' ? 4 : 2,
+          color: isSelected ? '#2563eb' : (estado === 'completado' ? '#22c55e' : 'transparent'),
+          fillColor: mainColor,
+          fillOpacity: isSelected ? 0.5 : 0.3,
+          weight: isSelected ? 4 : 2,
         }).addTo(layersRef.current!);
 
         poly.on('click', (e) => {
@@ -79,28 +98,37 @@ export function TerritoryMap({
           onSelectTerritorio(t);
         });
 
-        // Dibujar lados si está iniciado
-        if (estado === 'iniciado') {
-          const lados = Array.isArray(t.lados_completados) ? t.lados_completados : [];
+        // Lados Individuales (para marcar progreso lado a lado)
+        if (estado === 'iniciado' || isSelected) {
+          const hechos = Array.isArray(t.lados_completados) ? t.lados_completados : [];
           for (let i = 0; i < coords.length - 1; i++) {
-            const hecho = lados.includes(i);
+            const esLadoHecho = hechos.includes(i);
             L.polyline([coords[i], coords[i + 1]], {
-              color: hecho ? '#22c55e' : '#64748b',
-              weight: hecho ? 8 : 3,
+              color: esLadoHecho ? '#22c55e' : (isSelected ? '#2563eb' : '#9ca3af'),
+              weight: esLadoHecho ? 8 : 4,
+              opacity: esLadoHecho ? 1 : 0.6
             }).addTo(layersRef.current!);
           }
         }
-      } catch (e) { console.error("Error en mapa:", e); }
+      } catch (err) { console.error("Error drawing territory", err); }
     });
 
-    // Dibujar Observaciones
+    // Marcadores de Observaciones (Pines)
     observaciones.forEach((obs: any) => {
       if (obs.lat && obs.lng) {
-        L.marker([obs.lat, obs.lng]).addTo(layersRef.current!).bindPopup(obs.comentario);
+        L.marker([obs.lat, obs.lng])
+          .addTo(layersRef.current!)
+          .bindPopup(`<b>Nota:</b><br>${obs.comentario || ''}`);
       }
     });
 
   }, [territorios, observaciones, selectedTerritorio, mapReady]);
 
-  return <div ref={mapContainerRef} className="h-full w-full rounded-md" style={{ minHeight: '600px', border: '1px solid #ccc' }} />;
+  return (
+    <div 
+      ref={mapContainerRef} 
+      className="h-full w-full rounded-lg overflow-hidden" 
+      style={{ minHeight: '600px', cursor: isAddingObservation ? 'crosshair' : 'grab' }} 
+    />
+  );
 }
