@@ -1,39 +1,11 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
-import type { Territorio, Observacion, TerritorioEstado } from '@/types/territory';
-import type { Polygon } from 'geojson';
 import { useAuth } from '@/contexts/AuthContext';
 
 const BERNARDO_DE_IRIGOYEN = { lat: -26.2522, lng: -53.6497 };
-const DEFAULT_ZOOM = 15;
-
-interface TerritoryMapProps {
-  territorios: Territorio[];
-  observaciones: Observacion[];
-  selectedTerritorio: Territorio | null;
-  onSelectTerritorio: (territorio: Territorio | null) => void;
-  onPolygonCreated?: (geojson: Polygon) => void;
-  onAddObservacion?: (coords: { lat: number; lng: number }, territorioId: string) => void;
-  onToggleEdge?: (territorioId: string, edgeIndex: number) => void;
-  isDrawingMode?: boolean;
-  isAddingPin?: boolean;
-  isEdgeEditMode?: boolean;
-}
-
-const getEstadoColor = (estado: TerritorioEstado): string => {
-  switch (estado) {
-    case 'pendiente': return '#9ca3af';
-    case 'iniciado': return '#f97316';
-    case 'completado': return '#22c55e';
-    default: return '#9ca3af';
-  }
-};
-
-const EDGE_COMPLETED_COLOR = '#22c55e';
-const EDGE_PENDING_COLOR = '#f97316';
 
 export function TerritoryMap({
   territorios,
@@ -46,84 +18,29 @@ export function TerritoryMap({
   isDrawingMode = false,
   isAddingPin = false,
   isEdgeEditMode = false,
-}: TerritoryMapProps) {
+}: any) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const polygonsRef = useRef<Map<string, L.Polygon>>(new Map());
   const edgesRef = useRef<Map<string, L.Polyline[]>>(new Map());
   const labelsRef = useRef<L.Marker[]>([]);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
-  const { isAdmin } = useAuth();
+  const { isAdmin }: any = useAuth();
   const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
-
-    const map = L.map(mapContainerRef.current, {
-      center: [BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng],
-      zoom: DEFAULT_ZOOM,
-      zoomControl: true,
-    });
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap',
-      maxZoom: 19,
-    }).addTo(map);
-
+    const map = L.map(mapContainerRef.current).setView([BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     mapRef.current = map;
     setMapReady(true);
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
+    return () => { map.remove(); mapRef.current = null; };
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !isAdmin || !mapReady) return;
-
-    if (isDrawingMode) {
-      map.pm.addControls({
-        position: 'topleft',
-        drawCircle: false,
-        drawCircleMarker: false,
-        drawMarker: false,
-        drawPolyline: false,
-        drawRectangle: false,
-        drawText: false,
-      });
-
-      map.pm.enableDraw('Polygon');
-
-      const handleCreate = (e: any) => {
-        const layer = e.layer as L.Polygon;
-        const geojson = layer.toGeoJSON();
-        if (geojson.geometry.type === 'Polygon' && onPolygonCreated) {
-          onPolygonCreated(geojson.geometry as Polygon);
-        }
-        map.removeLayer(layer);
-      };
-
-      map.on('pm:create', handleCreate);
-      return () => {
-        map.pm.disableDraw();
-        map.pm.removeControls();
-        map.off('pm:create', handleCreate);
-      };
-    }
-  }, [isDrawingMode, isAdmin, onPolygonCreated, mapReady]);
-
-  useEffect(() => {
-    const map = mapRef.current;
     if (!map || !mapReady) return;
 
-   // Render territories with edge coloring for "iniciado" state
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-
-    // Clear existing polygons and edges
     polygonsRef.current.forEach((p) => map.removeLayer(p));
     polygonsRef.current.clear();
     edgesRef.current.forEach((edges) => edges.forEach((e) => map.removeLayer(e)));
@@ -131,106 +48,48 @@ export function TerritoryMap({
     labelsRef.current.forEach((l) => map.removeLayer(l));
     labelsRef.current = [];
 
-    territorios.forEach((territorio) => {
-      // Buscamos la geometría en cualquier columna posible
-      const geo = territorio.geometria_poligono || (territorio as any).poligono;
+    if (!territorios) return;
+
+    territorios.forEach((t: any) => {
+      const geo = t.geometria_poligono || t.poligono;
+      if (!geo || !geo.coordinates) return;
+
+      const coords = geo.coordinates[0].map((c: any) => [c[1], c[0]] as L.LatLngTuple);
+      const color = t.estado === 'completado' ? '#22c55e' : (t.estado === 'iniciado' ? '#f97316' : '#9ca3af');
       
-      if (!geo || !geo.coordinates || !Array.isArray(geo.coordinates) || !geo.coordinates[0]) {
-        console.warn(`El territorio ${territorio.numero} no tiene coordenadas.`);
-        return; 
-      }
-
-      // Convertimos coordenadas GeoJSON [lng, lat] a Leaflet [lat, lng]
-      const coordinates = geo.coordinates[0].map((coord: any) => [coord[1], coord[0]] as L.LatLngTuple);
-
-      const color = getEstadoColor(territorio.estado);
-      const isSelected = selectedTerritorio?.id === territorio.id;
-      const ladosCompletados = territorio.lados_completados || [];
-
-      if (territorio.estado === 'iniciado') {
-        const polygon = L.polygon(coordinates, {
-          color: 'transparent',
-          fillColor: color,
-          fillOpacity: isSelected ? 0.3 : 0.15,
-          weight: 0,
-        }).addTo(map);
-
-        polygon.on('click', () => onSelectTerritorio(territorio));
-        polygonsRef.current.set(territorio.id, polygon);
-
-        const edges: L.Polyline[] = [];
-        for (let i = 0; i < coordinates.length - 1; i++) {
-          const edgeLine = L.polyline([coordinates[i], coordinates[i + 1]], {
-            color: ladosCompletados.includes(i) ? EDGE_COMPLETED_COLOR : EDGE_PENDING_COLOR,
-            weight: isSelected ? 5 : 4,
-            opacity: 1,
-          }).addTo(map);
-
-          if (isEdgeEditMode && isSelected && onToggleEdge) {
-            edgeLine.on('click', (e) => {
-              L.DomEvent.stopPropagation(e);
-              onToggleEdge(territorio.id, i);
-            });
-          }
-          edges.push(edgeLine);
-        }
-        edgesRef.current.set(territorio.id, edges);
-      } else {
-        const polygon = L.polygon(coordinates, {
-          color,
-          fillColor: color,
-          fillOpacity: isSelected ? 0.5 : 0.3,
-          weight: isSelected ? 3 : 2,
-        }).addTo(map);
-
-        polygon.on('click', () => onSelectTerritorio(territorio));
-        polygonsRef.current.set(territorio.id, polygon);
-      }
-
-      const polygonForCenter = L.polygon(coordinates);
-      const label = L.marker(polygonForCenter.getBounds().getCenter(), {
-        icon: L.divIcon({
-          className: 'territory-label',
-          html: `<div style="background:${color};color:white;padding:4px 8px;border-radius:4px;font-weight:600;font-size:14px;">${territorio.numero}</div>`,
-          iconSize: [40, 20],
-          iconAnchor: [20, 10],
-        }),
-        interactive: false,
+      const poly = L.polygon(coords, {
+        color: t.id === selectedTerritorio?.id ? '#2563eb' : color,
+        fillColor: color,
+        fillOpacity: t.id === selectedTerritorio?.id ? 0.5 : 0.3,
+        weight: 2
       }).addTo(map);
 
+      poly.on('click', () => onSelectTerritorio(t));
+      polygonsRef.current.set(t.id, poly);
+
+      const label = L.marker(poly.getBounds().getCenter(), {
+        icon: L.divIcon({
+          className: 't-label',
+          html: `<div style="background:${color};color:white;padding:2px 6px;border-radius:4px;font-size:12px;">${t.numero}</div>`
+        }),
+        interactive: false
+      }).addTo(map);
       labelsRef.current.push(label);
     });
-  }, [territorios, selectedTerritorio, onSelectTerritorio, isEdgeEditMode, onToggleEdge, mapReady]);
+  }, [territorios, selectedTerritorio, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady) return;
-
+    if (!map || !mapReady || !observaciones) return;
     markersRef.current.forEach((m) => map.removeLayer(m));
     markersRef.current.clear();
 
-    observaciones.forEach((obs) => {
-      const marker = L.marker([obs.coordenadas.lat, obs.coordenadas.lng], {
-        icon: L.divIcon({
-          className: 'observation-marker',
-          html: `<div style="background:#ef4444;width:24px;height:24px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 24],
-        }),
-      })
-        .addTo(map)
-        .bindPopup(`<p style="margin:0;font-weight:500;">${obs.comentario}</p><p style="margin:4px 0 0;font-size:12px;color:#666;">${new Date(obs.created_at).toLocaleDateString('es-AR')}</p>`);
-
-      markersRef.current.set(obs.id, marker);
+    observaciones.forEach((obs: any) => {
+      if (!obs.coordenadas) return;
+      const m = L.marker([obs.coordenadas.lat, obs.coordenadas.lng]).addTo(map);
+      markersRef.current.set(obs.id, m);
     });
   }, [observaciones, mapReady]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !selectedTerritorio || !mapReady) return;
-    const polygon = polygonsRef.current.get(selectedTerritorio.id);
-    if (polygon) map.fitBounds(polygon.getBounds(), { padding: [50, 50] });
-  }, [selectedTerritorio, mapReady]);
-
-  return <div ref={mapContainerRef} className="h-full w-full" style={{ minHeight: '400px' }} />;
+  return <div ref={mapContainerRef} className="h-full w-full" style={{ minHeight: '500px', background: '#f0f0f0' }} />;
 }
