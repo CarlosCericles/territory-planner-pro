@@ -11,7 +11,7 @@ export function TerritoryMap({
   selectedTerritorio,
   onSelectTerritorio,
   onPolygonCreated,
-  isDrawingMode = false, // Ahora sí respetamos esta variable
+  isDrawingMode = false,
 }: any) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -29,32 +29,36 @@ export function TerritoryMap({
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
-  // Control de Herramientas de Dibujo - Solo cuando isDrawingMode es TRUE
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
     if (isDrawingMode) {
+      console.log(" MODO DIBUJO ACTIVADO");
       map.pm.addControls({
         position: 'topleft',
+        drawPolygon: true,
+        editMode: true,
+        removalMode: true,
         drawMarker: false,
         drawCircle: false,
         drawPolyline: false,
         drawRectangle: false,
-        drawPolygon: true,
-        editMode: true,
-        removalMode: true,
       });
       map.pm.enableDraw('Polygon');
 
       map.on('pm:create', (e: any) => {
         const geojson = e.layer.toGeoJSON();
+        console.log(" POLÍGONO DIBUJADO:", geojson.geometry);
         if (onPolygonCreated) onPolygonCreated(geojson.geometry);
       });
     } else {
       map.pm.disableDraw();
       map.pm.removeControls();
     }
+    return () => {
+      map.off('pm:create');
+    };
   }, [isDrawingMode, mapReady]);
 
   useEffect(() => {
@@ -66,7 +70,8 @@ export function TerritoryMap({
     if (edgesRef.current) edgesRef.current.clearLayers();
 
     territorios.forEach((t: any) => {
-      const geo = t.poligono || t.geometria_poligono || (t.geometria && t.geometria.poligono);
+      // Buscamos geometría en cualquier columna posible
+      const geo = t.geometria || t.poligono || t.geometria_poligono;
       if (!geo || !geo.coordinates || !geo.coordinates[0]) return;
 
       try {
@@ -88,9 +93,8 @@ export function TerritoryMap({
 
         polygonsRef.current.set(t.id, poly);
 
-        // Dibujo de Lados para seguimiento
         if (t.estado !== 'completado' && edgesRef.current) {
-          const lados = t.lados_completados || [];
+          const lados = Array.isArray(t.lados_completados) ? t.lados_completados : [];
           for (let i = 0; i < coords.length - 1; i++) {
             const hecho = lados.includes(i);
             L.polyline([coords[i], coords[i + 1]], {
@@ -99,13 +103,9 @@ export function TerritoryMap({
             }).addTo(edgesRef.current);
           }
         }
-
-        if (isSelected) {
-          map.fitBounds(poly.getBounds(), { padding: [50, 50] });
-        }
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error("Error dibujando t:", t.numero, e); }
     });
   }, [territorios, selectedTerritorio, mapReady]);
 
-  return <div ref={mapContainerRef} className="h-full w-full rounded-md" style={{ minHeight: '600px' }} />;
+  return <div ref={mapContainerRef} className="h-full w-full rounded-md" style={{ minHeight: '600px', border: '1px solid #ddd' }} />;
 }
