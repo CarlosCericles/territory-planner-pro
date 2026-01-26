@@ -119,101 +119,63 @@ export function TerritoryMap({
     if (!map || !mapReady) return;
 
    // Render territories with edge coloring for "iniciado" state
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
 
-    // Clear existing polygons and edges
-    polygonsRef.current.forEach((p) => map.removeLayer(p));
-    polygonsRef.current.clear();
-    edgesRef.current.forEach((edges) => edges.forEach((e) => map.removeLayer(e)));
-    edgesRef.current.clear();
-    labelsRef.current.forEach((l) => map.removeLayer(l));
-    labelsRef.current = [];
+    // Clear existing polygons and edges
+    polygonsRef.current.forEach((p) => map.removeLayer(p));
+    polygonsRef.current.clear();
+    edgesRef.current.forEach((edges) => edges.forEach((e) => map.removeLayer(e)));
+    edgesRef.current.clear();
+    labelsRef.current.forEach((l) => map.removeLayer(l));
+    labelsRef.current = [];
 
-    territorios.forEach((territorio) => {
-      // --- CAMBIO DE SEGURIDAD AQUÍ ---
-      // Verificamos si existe la geometría antes de intentar leerla
+    territorios.forEach((territorio) => {
+      // Buscamos la geometría en cualquier columna posible
       const geo = territorio.geometria_poligono || (territorio as any).poligono;
       
-      if (!geo || !geo.coordinates || !geo.coordinates[0]) {
-        console.warn(`El territorio ${territorio.numero} no tiene coordenadas válidas.`);
-        return; // Salta este territorio y sigue con el siguiente sin romper la app
+      if (!geo || !geo.coordinates || !Array.isArray(geo.coordinates) || !geo.coordinates[0]) {
+        console.warn(`El territorio ${territorio.numero} no tiene coordenadas.`);
+        return; 
       }
 
-      const coordinates = geo.coordinates[0].map(
-        ([lng, lat]: [number, number]) => [lat, lng] as L.LatLngTuple
-      );
-      // --------------------------------
+      // Convertimos coordenadas GeoJSON [lng, lat] a Leaflet [lat, lng]
+      const coordinates = geo.coordinates[0].map((coord: any) => [coord[1], coord[0]] as L.LatLngTuple);
 
-      const color = getEstadoColor(territorio.estado);
-      const isSelected = selectedTerritorio?.id === territorio.id;
-      const ladosCompletados = territorio.lados_completados || [];
+      const color = getEstadoColor(territorio.estado);
+      const isSelected = selectedTerritorio?.id === territorio.id;
+      const ladosCompletados = territorio.lados_completados || [];
 
-      // For "iniciado" territories, render edges individually
-      if (territorio.estado === 'iniciado') {
-        const polygon = L.polygon(coordinates, {
-          color: 'transparent',
-          fillColor: color,
-          fillOpacity: isSelected ? 0.3 : 0.15,
-          weight: 0,
-        }).addTo(map);
+      if (territorio.estado === 'iniciado') {
+        const polygon = L.polygon(coordinates, {
+          color: 'transparent',
+          fillColor: color,
+          fillOpacity: isSelected ? 0.3 : 0.15,
+          weight: 0,
+        }).addTo(map);
 
-        polygon.on('click', () => onSelectTerritorio(territorio));
-        polygonsRef.current.set(territorio.id, polygon);
+        polygon.on('click', () => onSelectTerritorio(territorio));
+        polygonsRef.current.set(territorio.id, polygon);
 
-        const edges: L.Polyline[] = [];
-        for (let i = 0; i < coordinates.length - 1; i++) {
-          const start = coordinates[i];
-          const end = coordinates[i + 1];
-          const isCompleted = ladosCompletados.includes(i);
-          
-          const edgeLine = L.polyline([start, end], {
-            color: isCompleted ? EDGE_COMPLETED_COLOR : EDGE_PENDING_COLOR,
-            weight: isSelected ? 5 : 4,
-            opacity: 1,
-          }).addTo(map);
+        const edges: L.Polyline[] = [];
+        for (let i = 0; i < coordinates.length - 1; i++) {
+          const edgeLine = L.polyline([coordinates[i], coordinates[i + 1]], {
+            color: ladosCompletados.includes(i) ? EDGE_COMPLETED_COLOR : EDGE_PENDING_COLOR,
+            weight: isSelected ? 5 : 4,
+            opacity: 1,
+          }).addTo(map);
 
-          if (isEdgeEditMode && isSelected && onToggleEdge) {
-            edgeLine.setStyle({ weight: 6, opacity: 1 });
-            edgeLine.on('click', (e) => {
-              L.DomEvent.stopPropagation(e);
-              onToggleEdge(territorio.id, i);
-            });
-          }
-          edges.push(edgeLine);
-        }
-        edgesRef.current.set(territorio.id, edges);
-      } else {
-        const polygon = L.polygon(coordinates, {
-          color,
-          fillColor: color,
-          fillOpacity: isSelected ? 0.5 : 0.3,
-          weight: isSelected ? 3 : 2,
-        }).addTo(map);
-
-        polygon.on('click', () => onSelectTerritorio(territorio));
-        polygonsRef.current.set(territorio.id, polygon);
-      }
-
-      const polygonForCenter = L.polygon(coordinates);
-      const center = polygonForCenter.getBounds().getCenter();
-      const label = L.marker(center, {
-        icon: L.divIcon({
-          className: 'territory-label',
-          html: `<div style="background:${color};color:white;padding:4px 8px;border-radius:4px;font-weight:600;font-size:14px;box-shadow:0 2px 4px rgba(0,0,0,0.2);">${territorio.numero}</div>`,
-          iconSize: [40, 20],
-          iconAnchor: [20, 10],
-        }),
-        interactive: false,
-      }).addTo(map);
-
-      labelsRef.current.push(label);
-    });
-  }, [territorios, selectedTerritorio, onSelectTerritorio, isEdgeEditMode, onToggleEdge, mapReady]);
+          if (isEdgeEditMode && isSelected && onToggleEdge) {
+            edgeLine.on('click', (e) => {
+              L.DomEvent.stopPropagation(e);
+              onToggleEdge(territorio.id, i);
+            });
+          }
+          edges.push(edgeLine);
+        }
         edgesRef.current.set(territorio.id, edges);
       } else {
-        // For "pendiente" and "completado", render normal polygon
         const polygon = L.polygon(coordinates, {
           color,
           fillColor: color,
@@ -225,13 +187,11 @@ export function TerritoryMap({
         polygonsRef.current.set(territorio.id, polygon);
       }
 
-      // Add label
       const polygonForCenter = L.polygon(coordinates);
-      const center = polygonForCenter.getBounds().getCenter();
-      const label = L.marker(center, {
+      const label = L.marker(polygonForCenter.getBounds().getCenter(), {
         icon: L.divIcon({
           className: 'territory-label',
-          html: `<div style="background:${color};color:white;padding:4px 8px;border-radius:4px;font-weight:600;font-size:14px;box-shadow:0 2px 4px rgba(0,0,0,0.2);">${territorio.numero}</div>`,
+          html: `<div style="background:${color};color:white;padding:4px 8px;border-radius:4px;font-weight:600;font-size:14px;">${territorio.numero}</div>`,
           iconSize: [40, 20],
           iconAnchor: [20, 10],
         }),
