@@ -23,6 +23,11 @@ export function TerritoryMap({
   const layersRef = useRef<L.LayerGroup | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
+  // LOG PARA VER SI LLEGAN LAS ORDENES
+  useEffect(() => {
+    console.log("ESTADO ACTUAL - Modo Pin:", isAddingPin, "Modo Lados:", isEdgeEditMode);
+  }, [isAddingPin, isEdgeEditMode]);
+
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     const map = L.map(mapContainerRef.current).setView([BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng], 15);
@@ -33,38 +38,27 @@ export function TerritoryMap({
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
-  // Manejo de Pines de Observaciones
+  // CLIC PARA PIN (OBSERVACIONES)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+
     const handleMapClick = (e: L.LeafletMouseEvent) => {
-      if (isAddingPin && onAddObservacion && selectedTerritorio) {
-        onAddObservacion(e.latlng, selectedTerritorio.id);
+      if (isAddingPin) {
+        console.log("INTENTANDO AGREGAR PIN EN:", e.latlng);
+        if (onAddObservacion && selectedTerritorio) {
+          onAddObservacion(e.latlng, selectedTerritorio.id);
+        } else {
+          console.warn("No hay territorio seleccionado o falta función onAddObservacion");
+        }
       }
     };
+
     map.on('click', handleMapClick);
     return () => { map.off('click', handleMapClick); };
   }, [isAddingPin, mapReady, onAddObservacion, selectedTerritorio]);
 
-  // Modo Dibujo
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    if (isDrawingMode) {
-      map.pm.addControls({ position: 'topleft', drawPolygon: true, removalMode: true });
-      map.pm.enableDraw('Polygon');
-      map.on('pm:create', (e: any) => {
-        onPolygonCreated?.(e.layer.toGeoJSON().geometry);
-        map.removeLayer(e.layer);
-      });
-    } else {
-      map.pm.disableDraw();
-      map.pm.removeControls();
-    }
-    return () => { map.off('pm:create'); };
-  }, [isDrawingMode, mapReady, onPolygonCreated]);
-
-  // Renderizado de Capas
+  // RENDERIZADO
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
@@ -78,58 +72,53 @@ export function TerritoryMap({
       try {
         const coords = geo.coordinates[0].map((c: any) => [c[1], c[0]] as L.LatLngTuple);
         const isSelected = t.id === selectedTerritorio?.id;
-        const estado = t.estado || 'pendiente';
-        const colorBase = estado === 'completado' ? '#22c55e' : (estado === 'iniciado' ? '#f97316' : '#9ca3af');
+        const color = t.estado === 'completado' ? '#22c55e' : (t.estado === 'iniciado' ? '#f97316' : '#9ca3af');
 
-        // Polígono de fondo
+        // Polígono Base
         const poly = L.polygon(coords, {
-          color: isSelected ? '#2563eb' : (estado === 'completado' ? '#22c55e' : 'transparent'),
-          fillColor: colorBase,
+          color: isSelected ? '#2563eb' : (t.estado === 'completado' ? '#22c55e' : 'transparent'),
+          fillColor: color,
           fillOpacity: isSelected ? 0.4 : 0.2,
-          weight: isSelected ? 3 : 1,
-          interactive: !isEdgeEditMode // Si editamos lados, el polígono no debe estorbar los clics
+          weight: isSelected ? 4 : 2,
         }).addTo(layersRef.current!);
 
-        if (!isEdgeEditMode) {
+        // Solo permitir seleccionar si NO estamos editando lados
+        if (!isEdgeEditMode && !isAddingPin) {
           poly.on('click', (e) => {
             L.DomEvent.stopPropagation(e);
             onSelectTerritorio(t);
           });
         }
 
-        // LADOS (Segmentos clickeables)
-        const ladosHechos = Array.isArray(t.lados_completados) ? t.lados_completados : [];
-        
-        for (let i = 0; i < coords.length - 1; i++) {
-          const hecho = ladosHechos.includes(i);
-          
-          // Creamos una línea invisible más gruesa por debajo para facilitar el clic
-          if (isEdgeEditMode && isSelected) {
-            const clickHelper = L.polyline([coords[i], coords[i+1]], {
-              color: 'transparent',
-              weight: 25, // Área de clic ancha
-              interactive: true
+        // DIBUJAR LADOS SI EL TERRITORIO ESTÁ SELECCIONADO
+        if (isSelected) {
+          const hechos = t.lados_completados || [];
+          for (let i = 0; i < coords.length - 1; i++) {
+            const esHecho = hechos.includes(i);
+            
+            // Línea visible
+            const line = L.polyline([coords[i], coords[i + 1]], {
+              color: esHecho ? '#22c55e' : (isEdgeEditMode ? '#2563eb' : '#9ca3af'),
+              weight: esHecho ? 8 : (isEdgeEditMode ? 10 : 4), // Más gruesa en modo edición
+              opacity: 1,
+              dashArray: isEdgeEditMode && !esHecho ? '5, 5' : ''
             }).addTo(layersRef.current!);
 
-            clickHelper.on('click', (e) => {
-              L.DomEvent.stopPropagation(e);
-              console.log("Clic en lado:", i);
-              onToggleEdge(t.id, i);
-            });
+            // CLIC EN LADO
+            if (isEdgeEditMode) {
+              line.setStyle({ cursor: 'pointer' });
+              line.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                console.log("CLIC DETECTADO EN LADO NÚMERO:", i);
+                onToggleEdge(t.id, i);
+              });
+            }
           }
-
-          // La línea visible
-          L.polyline([coords[i], coords[i + 1]], {
-            color: hecho ? '#22c55e' : (isSelected ? '#2563eb' : '#9ca3af'),
-            weight: hecho ? 8 : (isEdgeEditMode && isSelected ? 5 : 3),
-            opacity: hecho ? 1 : 0.7,
-            dashArray: (isEdgeEditMode && isSelected && !hecho) ? '5, 10' : ''
-          }).addTo(layersRef.current!);
         }
       } catch (err) { console.error(err); }
     });
 
-    // Observaciones
+    // PINES
     observaciones.forEach((obs: any) => {
       const c = obs.coordenadas;
       if (c?.lat && c?.lng) {
@@ -137,7 +126,7 @@ export function TerritoryMap({
       }
     });
 
-  }, [territorios, observaciones, selectedTerritorio, isEdgeEditMode, mapReady]);
+  }, [territorios, observaciones, selectedTerritorio, isEdgeEditMode, isAddingPin, mapReady]);
 
-  return <div ref={mapContainerRef} className="h-full w-full" style={{ minHeight: '600px', cursor: isEdgeEditMode ? 'pointer' : 'grab' }} />;
+  return <div ref={mapContainerRef} className="h-full w-full" style={{ minHeight: '600px' }} />;
 }
