@@ -10,7 +10,7 @@ import { UserMenu } from '@/components/layout/UserMenu';
 import { OfflineIndicator } from '@/components/layout/OfflineIndicator';
 import { CreateTerritorioForm } from '@/components/territory/CreateTerritorioForm';
 import { ObservacionForm } from '@/components/territory/ObservacionForm';
-import { UserManagementModal } from "@/components/admin/UserManagementModal";
+import { UserManagementModal } from "@/components/admin/UserManagementModal.tsx";
 import { Button } from '@/components/ui/button';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
 import type { Polygon } from 'geojson';
