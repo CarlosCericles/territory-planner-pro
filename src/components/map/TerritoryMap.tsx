@@ -69,7 +69,7 @@ export function TerritoryMap({
       // @ts-ignore
       map.pm.disableDraw();
     }
-  }, [isDrawingMode, mapReady]);
+  }, [isDrawingMode, mapReady, onPolygonCreated]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -88,9 +88,9 @@ export function TerritoryMap({
         fillColor: color,
         fillOpacity: isSelected ? 0.5 : 0.3,
         weight: isSelected ? 3 : 1,
-        interactive: !isDrawingMode
+        interactive: !isDrawingMode && !isAddingPin
       }).addTo(layersRef.current!).on('click', (e) => {
-        if (!isDrawingMode) {
+        if (!isDrawingMode && !isAddingPin) {
           L.DomEvent.stopPropagation(e);
           onSelectTerritorio(t);
         }
@@ -102,18 +102,33 @@ export function TerritoryMap({
       if (c?.lat && c?.lng) {
         const marker = L.marker([c.lat, c.lng]).addTo(layersRef.current!);
         const cont = document.createElement('div');
-        cont.innerHTML = `<b>Observación:</b><br>${obs.comentario}`;
+        cont.innerHTML = `<b>Observación:</b><br>${obs.comentario || 'Sin texto'}`;
         if (isAdmin) {
           const btn = document.createElement('button');
           btn.innerText = 'Eliminar';
-          btn.style.cssText = "background:#ef4444;color:white;border:none;width:100%;margin-top:8px;cursor:pointer;border-radius:4px";
-          btn.onclick = () => { onDeleteObservacion(obs.id); map.closePopup(); };
+          btn.style.cssText = "background:#ef4444;color:white;border:none;width:100%;margin-top:8px;padding:4px;cursor:pointer;border-radius:4px";
+          btn.onclick = () => { 
+            if(confirm('¿Eliminar observación?')) {
+              onDeleteObservacion(obs.id); 
+              map.closePopup(); 
+            }
+          };
           cont.appendChild(btn);
         }
         marker.bindPopup(cont);
       }
     });
-  }, [territorios, observaciones, selectedTerritorio, isDrawingMode, mapReady]);
+  }, [territorios, observaciones, selectedTerritorio, isDrawingMode, isAddingPin, mapReady, isAdmin]);
 
-  return <div ref={mapContainerRef} className="h-full w-full" style={{ minHeight: '600px', cursor: isDrawingMode ? 'crosshair' : 'grab' }} />;
+  return (
+    <div 
+      ref={mapContainerRef} 
+      className="h-full w-full" 
+      style={{ 
+        minHeight: '600px', 
+        cursor: isDrawingMode || isAddingPin ? 'crosshair' : 'grab',
+        zIndex: 1 // Aseguramos que el mapa tenga un z-index base bajo
+      }} 
+    />
+  );
 }
