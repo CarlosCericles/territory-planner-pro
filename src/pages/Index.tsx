@@ -10,12 +10,11 @@ import { UserMenu } from '@/components/layout/UserMenu';
 import { OfflineIndicator } from '@/components/layout/OfflineIndicator';
 import { CreateTerritorioForm } from '@/components/territory/CreateTerritorioForm';
 import { ObservacionForm } from '@/components/territory/ObservacionForm';
-// Importación segura
 import { UserManagementModal } from "@/components/admin/UserManagementModal";
 import { Button } from '@/components/ui/button';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
 import type { Polygon } from 'geojson';
-import { MapPin, List, Plus, Loader2, PenTool, Users } from 'lucide-react';
+import { MapPin, List, Plus, Loader2, Users } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -42,8 +41,9 @@ const Index = () => {
     }
   }, [authLoading, user, navigate]);
 
-  // Si está cargando, mostramos un loader centrado
-  if (authLoading) {
+  // CORRECCIÓN: Si hay usuario pero authLoading es true (cargando rol), 
+  // dejamos pasar para evitar el bloqueo infinito.
+  if (authLoading && !user) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -61,6 +61,7 @@ const Index = () => {
           <h1 className="text-lg font-semibold">Territorios</h1>
         </div>
         <div className="flex items-center gap-2">
+          {/* El botón aparecerá en cuanto isAdmin sea true */}
           {isAdmin && (
             <>
               <Button
