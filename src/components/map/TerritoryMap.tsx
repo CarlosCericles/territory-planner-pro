@@ -46,31 +46,33 @@ export function TerritoryMap({
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
-  // 1. Efecto para manejar el Clic del PIN (Prioridad Máxima)
+  // --- CAMBIO CLAVE AQUÍ: Captura de clic reforzada ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const handleMapClick = (e: L.LeafletMouseEvent) => {
-      if (isAddingPin && selectedTerritorio && onAddObservacion) {
-        // Detenemos cualquier otro evento
-        L.DomEvent.stopPropagation(e);
-        onAddObservacion(e.latlng);
+    function handleMapClick(e: L.LeafletMouseEvent) {
+      if (isAddingPin && selectedTerritorio) {
+        // Forzamos que el evento se procese
+        if (onAddObservacion) {
+          onAddObservacion(e.latlng);
+        }
       }
-    };
+    }
 
     if (isAddingPin) {
+      // Usamos mousedown como alternativa si click falla, o simplemente click pero sin propagación
       map.on('click', handleMapClick);
-      // Cambiamos el cursor manualmente para asegurar
       mapContainerRef.current!.style.cursor = 'crosshair';
     } else {
       map.off('click', handleMapClick);
+      mapContainerRef.current!.style.cursor = '';
     }
 
     return () => { map.off('click', handleMapClick); };
-  }, [isAddingPin, mapReady, onAddObservacion, selectedTerritorio]);
+  }, [isAddingPin, mapReady, selectedTerritorio, onAddObservacion]);
 
-  // 2. Lógica de Dibujo Geoman
+  // --- Lógica de Dibujo Geoman ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -96,7 +98,7 @@ export function TerritoryMap({
     }
   }, [isDrawingMode, mapReady, onPolygonCreated]);
 
-  // 3. Renderizado de Capas
+  // --- Renderizado de Capas ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
@@ -114,11 +116,10 @@ export function TerritoryMap({
         fillColor: color,
         fillOpacity: isSelected ? 0.4 : 0.2,
         weight: 2,
-        // DESACTIVAMOS interactividad del polígono si estamos en modo PIN para que el clic pase al mapa
+        // Bloqueamos interactividad si estamos en modo pin para que el clic llegue al mapa
         interactive: !isAddingPin && !isDrawingMode 
       }).addTo(layersRef.current!);
 
-      // Número del territorio
       poly.bindTooltip(`<div style="font-weight:bold">${t.numero}</div>`, {
         permanent: true, direction: 'center', className: 'number-tooltip'
       }).openTooltip();
@@ -138,7 +139,7 @@ export function TerritoryMap({
             color: esHecho ? '#22c55e' : (isEdgeEditMode ? '#2563eb' : '#9ca3af'),
             weight: isEdgeEditMode ? 12 : (esHecho ? 6 : 3),
             opacity: 1,
-            interactive: isEdgeEditMode && !isAddingPin // Prioridad al Pin
+            interactive: isEdgeEditMode && !isAddingPin
           }).addTo(layersRef.current!);
 
           if (isEdgeEditMode && !isAddingPin) {
@@ -167,4 +168,25 @@ export function TerritoryMap({
         marker.bindPopup(cont);
       }
     });
-  }, [territor
+  }, [territorios, observaciones, selectedTerritorio, isDrawingMode, isAddingPin, isEdgeEditMode, mapReady, isAdmin]);
+
+  return (
+    <>
+      <style>{`
+        .number-tooltip {
+          background: rgba(255, 255, 255, 0.6) !important;
+          border: none !important;
+          box-shadow: none !important;
+          padding: 0px 4px !important;
+          border-radius: 4px !important;
+          pointer-events: none !important;
+        }
+      `}</style>
+      <div 
+        ref={mapContainerRef} 
+        className="h-full w-full" 
+        style={{ minHeight: '600px', zIndex: 0 }} 
+      />
+    </>
+  );
+}
