@@ -27,21 +27,22 @@ interface TerritorySidebarProps {
   onClose: () => void;
 }
 
-const estadoConfig: Record<TerritorioEstado, { label: string; className: string; bgClass: string }> = {
+// Configuración visual más limpia: Quitamos los bgClass pesados
+const estadoConfig: Record<TerritorioEstado, { label: string; className: string; color: string }> = {
   pendiente: {
     label: 'Pendiente',
-    className: 'bg-muted text-muted-foreground',
-    bgClass: 'bg-gray-500/20',
+    className: 'bg-slate-100 text-slate-600 border-slate-200',
+    color: 'border-l-slate-400',
   },
   iniciado: {
     label: 'Iniciado',
-    className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
-    bgClass: 'bg-orange-500/20',
+    className: 'bg-orange-50 text-orange-700 border-orange-100',
+    color: 'border-l-orange-500',
   },
   completado: {
     label: 'Completado',
-    className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-    bgClass: 'bg-green-500/20',
+    className: 'bg-green-50 text-green-700 border-green-100',
+    color: 'border-l-green-500',
   },
 };
 
@@ -56,209 +57,103 @@ export function TerritorySidebar({
 }: TerritorySidebarProps) {
   const [expandedTerritorio, setExpandedTerritorio] = useState<string | null>(null);
 
-  // Group observaciones by territorio
   const observacionesByTerritorio = observaciones.reduce((acc, obs) => {
-    if (!acc[obs.territorio_id]) {
-      acc[obs.territorio_id] = [];
-    }
+    if (!acc[obs.territorio_id]) acc[obs.territorio_id] = [];
     acc[obs.territorio_id].push(obs);
     return acc;
   }, {} as Record<string, Observacion[]>);
 
-  // Sort territorios by numero
   const sortedTerritorios = [...territorios].sort((a, b) => a.numero - b.numero);
 
   const handleTerritorioClick = (territorio: Territorio) => {
     onSelectTerritorio(territorio);
-    if (expandedTerritorio === territorio.id) {
-      setExpandedTerritorio(null);
-    } else {
-      setExpandedTerritorio(territorio.id);
-    }
-  };
-
-  const handleEstadoChange = (territorio: Territorio, estado: TerritorioEstado) => {
-    onSelectTerritorio(territorio);
-    onChangeEstado(estado);
+    setExpandedTerritorio(expandedTerritorio === territorio.id ? null : territorio.id);
   };
 
   return (
     <div
       className={cn(
-        'fixed left-0 top-14 bottom-0 z-[2000] w-80 bg-card border-r shadow-lg transition-transform duration-300',
+        'fixed left-0 top-14 bottom-0 z-[2000] w-80 bg-background border-r shadow-2xl transition-transform duration-300 ease-in-out',
         isOpen ? 'translate-x-0' : '-translate-x-full'
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between p-4 border-b bg-card">
         <div className="flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-primary" />
-          <h2 className="font-semibold">Territorios y Comentarios</h2>
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <MessageSquare className="h-5 w-5 text-primary" />
+          </div>
+          <h2 className="font-bold text-sm tracking-tight">TERRITORIOS</h2>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
+        <Button variant="ghost" size="icon" className="rounded-full" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* Territories list */}
-      <ScrollArea className="h-[calc(100%-65px)]">
-        <div className="p-2">
+      <ScrollArea className="h-[calc(100%-65px)] bg-slate-50/30">
+        <div className="p-3 space-y-3">
           {sortedTerritorios.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground">
+            <div className="p-8 text-center text-muted-foreground italic text-sm">
               No hay territorios registrados
             </div>
           ) : (
             sortedTerritorios.map((territorio) => {
               const estado = territorio.estado || 'pendiente';
-              const config = estadoConfig[estado] || estadoConfig.pendiente;
+              const config = estadoConfig[estado];
               const territoryObservaciones = observacionesByTerritorio[territorio.id] || [];
               const isExpanded = expandedTerritorio === territorio.id;
               const isSelected = selectedTerritorio?.id === territorio.id;
 
               return (
-                <div key={territorio.id} className={cn('mb-1 rounded-lg', config?.bgClass || 'bg-gray-500/20')}>
-                  {/* Territory header */}
+                <div 
+                  key={territorio.id} 
+                  className={cn(
+                    'group transition-all duration-200 rounded-xl border bg-card overflow-hidden',
+                    config.color,
+                    'border-l-4',
+                    isSelected ? 'ring-2 ring-primary shadow-md' : 'shadow-sm'
+                  )}
+                >
                   <button
                     onClick={() => handleTerritorioClick(territorio)}
-                    className={cn(
-                      'w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors',
-                      'hover:bg-accent/50',
-                      isSelected && 'ring-2 ring-primary'
-                    )}
+                    className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 transition-colors"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-lg">#{territorio.numero}</span>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-black text-xl text-primary">#{territorio.numero}</span>
                         {territorio.nombre && (
-                          <span className="text-sm text-muted-foreground truncate">
+                          <span className="text-sm font-medium text-slate-600 truncate">
                             {territorio.nombre}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <Badge variant="secondary" className={cn('text-xs', config.className)}>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={cn('text-[10px] uppercase px-2 py-0', config.className)}>
                           {config.label}
                         </Badge>
                         {territoryObservaciones.length > 0 && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
                             <MessageSquare className="h-3 w-3" />
                             {territoryObservaciones.length}
                           </span>
                         )}
                       </div>
-                      {/* Fecha de completado */}
-                      {territorio.ultima_fecha_completado && (
-                        <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          <span>
-                            Terminado: {format(new Date(territorio.ultima_fecha_completado), "d MMM yyyy", { locale: es })}
-                          </span>
-                        </div>
-                      )}
                     </div>
-                    <ChevronRight
-                      className={cn(
-                        'h-4 w-4 text-muted-foreground transition-transform shrink-0',
-                        isExpanded && 'rotate-90'
-                      )}
-                    />
+                    <ChevronRight className={cn(
+                      'h-5 w-5 text-slate-300 transition-transform duration-200',
+                      isExpanded && 'rotate-90 text-primary'
+                    )} />
                   </button>
 
-                  {/* Expanded content */}
                   {isExpanded && (
-                    <div className="px-3 pb-3">
-                      {/* Estado buttons */}
-                      <div className="mb-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">Cambiar estado:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {territorio.estado !== 'pendiente' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEstadoChange(territorio, 'pendiente');
-                              }}
-                            >
-                              <RotateCcw className="mr-1 h-3 w-3" />
-                              Pendiente
-                            </Button>
-                          )}
-                          {territorio.estado !== 'iniciado' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs bg-orange-500/10 hover:bg-orange-500/20 border-orange-300"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEstadoChange(territorio, 'iniciado');
-                              }}
-                            >
-                              <Play className="mr-1 h-3 w-3" />
-                              Iniciado
-                            </Button>
-                          )}
-                          {territorio.estado !== 'completado' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs bg-green-500/10 hover:bg-green-500/20 border-green-300"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEstadoChange(territorio, 'completado');
-                              }}
-                            >
-                              <CheckCircle2 className="mr-1 h-3 w-3" />
-                              Completado
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      <Separator className="my-2" />
-
-                      {/* Observaciones */}
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-2">
-                          Comentarios ({territoryObservaciones.length}):
-                        </p>
-                        {territoryObservaciones.length === 0 ? (
-                          <p className="text-sm text-muted-foreground py-1">
-                            Sin comentarios aún
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {territoryObservaciones.map((obs) => (
-                              <div
-                                key={obs.id}
-                                className="p-2 rounded bg-background/50 border"
-                              >
-                                <div className="flex items-start gap-2">
-                                  <MapPin className="h-3 w-3 text-destructive mt-1 shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm">{obs.comentario}</p>
-                                    <span className="text-xs text-muted-foreground">
-                                      {formatDistanceToNow(new Date(obs.created_at), {
-                                        addSuffix: true,
-                                        locale: es,
-                                      })}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </ScrollArea>
-    </div>
-  );
-}
+                    <div className="px-4 pb-4 bg-white/50 animate-in fade-in slide-in-from-top-1">
+                      <Separator className="mb-4" />
+                      
+                      <div className="space-y-4">
+                        {/* Acciones de Estado */}
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Acciones</p>
+                          <div className="flex flex-wrap gap-2">
+                            {estado !== 'pendiente' && (
+                              <Button variant="outline" size="sm" className="h-8 text-xs rounded-md" 
+                                onClick={(e) => {
