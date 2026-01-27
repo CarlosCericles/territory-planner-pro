@@ -25,17 +25,18 @@ export function TerritoryMap({
   onPolygonCreated,
   onAddObservacion,
   onToggleEdge,
-  onDeleteObservacion, // <-- Nueva prop para borrar
+  onDeleteObservacion,
   isDrawingMode = false,
   isAddingPin = false,
   isEdgeEditMode = false,
-  isAdmin = false,     // <-- Nueva prop para saber si mostrar el botón de borrar
+  isAdmin = false,
 }: any) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const layersRef = useRef<L.LayerGroup | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
+  // 1. Inicialización del Mapa
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     const map = L.map(mapContainerRef.current).setView([BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng], 15);
@@ -46,6 +47,52 @@ export function TerritoryMap({
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
+  // 2. EFECTO CLAVE: Activar/Desactivar Dibujo de Geoman
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    if (isDrawingMode) {
+      // Activar modo dibujo de polígono
+      // @ts-ignore
+      map.pm.enableDraw('Polygon', {
+        snappable: true,
+        cursorMarker: true,
+        allowSelfIntersection: false,
+        templineStyle: { color: '#2563eb', dashArray: '5, 5' },
+        hintlineStyle: { color: '#2563eb', dashArray: '5, 5' },
+      });
+
+      // Escuchar cuando se termina el dibujo
+      const handleCreate = (e: any) => {
+        const { layer } = e;
+        const geojson = layer.toGeoJSON().geometry;
+        
+        // Enviamos el polígono al padre (Index.tsx)
+        if (onPolygonCreated) {
+          onPolygonCreated(geojson);
+        }
+        
+        // Removemos el dibujo temporal (el formulario se encargará de guardarlo de forma definitiva)
+        map.removeLayer(layer);
+        // @ts-ignore
+        map.pm.disableDraw();
+      };
+
+      map.on('pm:create', handleCreate);
+
+      return () => {
+        map.off('pm:create', handleCreate);
+        // @ts-ignore
+        map.pm.disableDraw();
+      };
+    } else {
+      // @ts-ignore
+      map.pm.disableDraw();
+    }
+  }, [isDrawingMode, mapReady, onPolygonCreated]);
+
+  // 3. Manejo de clics para Pines (Observaciones)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -58,14 +105,13 @@ export function TerritoryMap({
     return () => { map.off('click', handleMapClick); };
   }, [isAddingPin, mapReady, onAddObservacion, selectedTerritorio]);
 
-  // Renderizado de capas
+  // 4. Renderizado de capas (Territorios y Observaciones)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
 
     layersRef.current.clearLayers();
 
-    // --- Renderizado de Territorios ---
     territorios.forEach((t: any) => {
       const geo = t.geometria_poligono || t.poligono || t.geometria;
       if (!geo?.coordinates?.[0]) return;
@@ -79,10 +125,10 @@ export function TerritoryMap({
           fillColor: color,
           fillOpacity: isSelected ? 0.5 : 0.3,
           weight: isSelected ? 4 : 2,
-          interactive: !isAddingPin && !isEdgeEditMode
+          interactive: !isAddingPin && !isEdgeEditMode && !isDrawingMode
         }).addTo(layersRef.current!);
 
-        if (!isAddingPin && !isEdgeEditMode) {
+        if (!isAddingPin && !isEdgeEditMode && !isDrawingMode) {
           poly.on('click', (e) => {
             L.DomEvent.stopPropagation(e);
             onSelectTerritorio(t);
@@ -111,38 +157,12 @@ export function TerritoryMap({
       } catch (err) { console.error(err); }
     });
 
-    // --- Renderizado de Observaciones (Pines) ---
     observaciones.forEach((obs: any) => {
       const c = obs.coordenadas || { lat: obs.lat, lng: obs.lng };
       if (c && c.lat && c.lng) {
         const marker = L.marker([c.lat, c.lng]).addTo(layersRef.current!);
-        
-        // Crear el contenido del Popup
         const popupContent = document.createElement('div');
         popupContent.innerHTML = `
           <div style="padding: 5px;">
             <p style="margin: 0 0 10px 0;"><b>Observación:</b><br>${obs.comentario || 'Sin texto'}</p>
-            ${isAdmin ? `<button id="btn-delete-${obs.id}" style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; width: 100%;">Eliminar</button>` : ''}
-          </div>
-        `;
-
-        // Escuchar el clic en el botón de eliminar después de que se abra el popup
-        marker.bindPopup(popupContent);
-        marker.on('popupopen', () => {
-          if (isAdmin) {
-            const btn = document.getElementById(`btn-delete-${obs.id}`);
-            btn?.addEventListener('click', () => {
-              if (confirm('¿Estás seguro de que deseas eliminar esta observación?')) {
-                onDeleteObservacion(obs.id);
-                map.closePopup();
-              }
-            });
-          }
-        });
-      }
-    });
-
-  }, [territorios, observaciones, selectedTerritorio, isEdgeEditMode, isAddingPin, mapReady, isAdmin]);
-
-  return <div ref={mapContainerRef} className="h-full w-full" style={{ minHeight: '600px', cursor: isAddingPin ? 'crosshair' : (isEdgeEditMode ? 'help' : 'grab') }} />;
-}
+            ${isAdmin ? `<button id="btn-delete-${obs.id}" style="background: #ef4444;
