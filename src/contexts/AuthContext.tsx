@@ -9,8 +9,8 @@ interface AuthContextType {
   userRole: AppRole | null;
   isAdmin: boolean;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -31,98 +31,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
       
       if (error) throw error;
-      setUserRole((data?.role as AppRole) || 'publicador');
+      
+      const role = (data?.role as AppRole) || 'publicador';
+      console.log("Rol detectado:", role);
+      setUserRole(role);
     } catch (err) {
       console.error('Error fetching role:', err);
       setUserRole('publicador');
+    } finally {
+      // Liberamos el estado de carga una vez intentamos obtener el rol
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    let mounted = true;
-
-    const initialize = async () => {
+    // 1. Verificar sesión inicial
+    const initAuth = async () => {
       try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
-        if (!mounted) return;
-
-        if (initialSession) {
-          setSession(initialSession);
-          setUser(initialSession.user);
-          await fetchUserRole(initialSession.user.id);
+        const { data: { session: initSession } } = await supabase.auth.getSession();
+        setSession(initSession);
+        setUser(initSession?.user ?? null);
+        
+        if (initSession?.user) {
+          await fetchUserRole(initSession.user.id);
+        } else {
+          setIsLoading(false);
         }
-      } catch (err) {
-        console.error("Auth init error:", err);
-      } finally {
-        if (mounted) setIsLoading(false);
+      } catch (e) {
+        console.error("Auth init error:", e);
+        setIsLoading(false);
       }
     };
 
-    initialize();
+    initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      if (!mounted) return;
-
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-
-      if (currentSession?.user) {
-        await fetchUserRole(currentSession.user.id);
+    // 2. Escuchar cambios de estado (Login/Logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, curSession) => {
+      setSession(curSession);
+      setUser(curSession?.user ?? null);
+      
+      if (curSession?.user) {
+        fetchUserRole(curSession.user.id);
       } else {
         setUserRole(null);
+        setIsLoading(false);
       }
-      
-      // Aseguramos que después de cualquier cambio de auth, el cargando se apague
-      setIsLoading(false);
     });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
-
-  const signIn = async (email: string, password: string) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      return { error: error as Error | null };
-    } catch (error: any) {
-      return { error };
-    }
-  };
-
-  const signUp = async (email: string, password: string, fullName: string) => {
-    try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName } },
-      });
-      return { error: error as Error | null };
-    } catch (error: any) {
-      return { error };
-    }
-  };
-
-  const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } finally {
-      setUser(null);
-      setSession(null);
-      setUserRole(null);
-    }
-  };
 
   const value = {
     user,
     session,
     userRole,
-    isAdmin: !!userRole && userRole === 'admin',
+    isAdmin: userRole === 'admin',
     isLoading,
-    signIn,
-    signUp,
-    signOut,
+    signIn: (email: string, pass: string) => supabase.auth.signInWithPassword({ email, password: pass }),
+    signUp: (email: string, pass: string, name: string) => 
+      supabase.auth.signUp({ 
+        email, 
+        password: pass, 
+        options: { data: { full_name: name } } 
+      }),
+    signOut: async () => {
+      await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
+      setUserRole(null);
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
