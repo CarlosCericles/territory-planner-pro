@@ -23,30 +23,35 @@ export function TerritorySidebar({
   onClose
 }: TerritorySidebarProps) {
   
-  // Función para definir la prioridad del orden
+  // FUNCIÓN DE PRIORIDAD CORREGIDA:
   const getPriority = (estado: TerritorioEstado) => {
     switch (estado) {
-      case 'iniciado': return 1;    // Arriba
-      case 'disponible': return 2;  // Medio
-      case 'completado': return 3;  // Abajo
+      case 'iniciado': return 1;    // 1° Arriba (Naranja)
+      case 'disponible': return 2;  // 2° Medio (Gris)
+      case 'completado': return 3;  // 3° Abajo (Verde)
       default: return 4;
     }
   };
 
-  // Ordenamos la lista antes de mostrarla
+  // Ordenamos la lista con la nueva lógica
   const territoriosOrdenados = [...territorios].sort((a, b) => {
     const priorityA = getPriority(a.estado);
     const priorityB = getPriority(b.estado);
-    if (priorityA !== priorityB) return priorityA - priorityB;
-    return a.numero - b.numero; // Si tienen igual estado, ordena por número
+    
+    // Si la prioridad es distinta, ordena por prioridad (1, 2 o 3)
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+    // Si tienen el mismo estado, los ordena por número de territorio
+    return a.numero - b.numero;
   });
 
   const getStatusBadge = (estado: TerritorioEstado) => {
     switch (estado) {
       case 'completado':
-        return <Badge className="bg-green-500"><CheckCircle2 className="w-3 h-3 mr-1" /> Completado</Badge>;
+        return <Badge className="bg-green-500 text-white"><CheckCircle2 className="w-3 h-3 mr-1" /> Completado</Badge>;
       case 'iniciado':
-        return <Badge className="bg-orange-500"><Clock className="w-3 h-3 mr-1" /> Iniciado</Badge>;
+        return <Badge className="bg-orange-500 text-white"><Clock className="w-3 h-3 mr-1" /> Iniciado</Badge>;
       default:
         return <Badge variant="secondary"><Circle className="w-3 h-3 mr-1" /> Disponible</Badge>;
     }
