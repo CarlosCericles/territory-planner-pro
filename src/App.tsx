@@ -15,8 +15,9 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
+        {/* Cambiamos la posición a Top Center para que no estorbe abajo */}
+        <Toaster /> 
+        <Sonner position="top-center" expand={false} richColors />
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
