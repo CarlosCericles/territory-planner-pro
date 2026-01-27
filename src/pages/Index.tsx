@@ -10,10 +10,11 @@ import { UserMenu } from '@/components/layout/UserMenu';
 import { OfflineIndicator } from '@/components/layout/OfflineIndicator';
 import { CreateTerritorioForm } from '@/components/territory/CreateTerritorioForm';
 import { ObservacionForm } from '@/components/territory/ObservacionForm';
+import { UserManagementModal } from "@/components/admin/UserManagementModal";
 import { Button } from '@/components/ui/button';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
 import type { Polygon } from 'geojson';
-import { MapPin, List, Plus, Loader2, PenTool } from 'lucide-react';
+import { MapPin, List, Plus, Loader2, PenTool, Users } from 'lucide-react';
 
 const Index = () => {
   const navigate = useNavigate();
@@ -22,12 +23,12 @@ const Index = () => {
   const { territorios, isLoading: territoriosLoading, createTerritorio, updateEstado } = useTerritorios();
   const [selectedTerritorio, setSelectedTerritorio] = useState<Territorio | null>(null);
   
-  // Hook de observaciones: obtenemos todas y las funciones de mutación
+  // Hook de observaciones
   const { observaciones: allObservaciones } = useObservaciones();
   const { 
     observaciones, 
     createObservacion, 
-    deleteObservacion // Extraemos la función de borrar
+    deleteObservacion 
   } = useObservaciones(selectedTerritorio?.id);
 
   const [isDrawingMode, setIsDrawingMode] = useState(false);
@@ -36,6 +37,7 @@ const Index = () => {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showObservacionDialog, setShowObservacionDialog] = useState(false);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false); // Estado para el modal de usuarios
   const [pendingPolygon, setPendingPolygon] = useState<Polygon | null>(null);
   const [pendingPinCoords, setPendingPinCoords] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -62,7 +64,6 @@ const Index = () => {
     setShowObservacionDialog(true);
   }, []);
 
-  // Función para eliminar observación desde el mapa
   const handleDeleteObservacion = useCallback(async (id: string) => {
     try {
       await deleteObservacion.mutateAsync(id);
@@ -161,14 +162,25 @@ const Index = () => {
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (
-            <Button
-              variant={isDrawingMode ? 'secondary' : 'outline'}
-              size="sm"
-              onClick={() => setIsDrawingMode(!isDrawingMode)}
-            >
-              <Plus className="mr-1 h-4 w-4" />
-              {isDrawingMode ? 'Cancelar' : 'Nuevo'}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsUserModalOpen(true)}
+                className="hidden md:flex items-center gap-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+              >
+                <Users className="h-4 w-4" />
+                Equipo
+              </Button>
+              <Button
+                variant={isDrawingMode ? 'secondary' : 'outline'}
+                size="sm"
+                onClick={() => setIsDrawingMode(!isDrawingMode)}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                {isDrawingMode ? 'Cancelar' : 'Nuevo'}
+              </Button>
+            </>
           )}
           <UserMenu />
         </div>
@@ -183,8 +195,8 @@ const Index = () => {
           onPolygonCreated={handlePolygonCreated}
           onAddObservacion={handlePinPlaced}
           onToggleEdge={handleToggleEdge}
-          onDeleteObservacion={handleDeleteObservacion} // Prop nueva conectada
-          isAdmin={isAdmin} // Pasamos permiso
+          onDeleteObservacion={handleDeleteObservacion}
+          isAdmin={isAdmin}
           isDrawingMode={isDrawingMode}
           isAddingPin={isPinMode}
           isEdgeEditMode={isEdgeEditMode}
@@ -225,7 +237,6 @@ const Index = () => {
           observaciones={allObservaciones}
           selectedTerritorio={selectedTerritorio}
           onSelectTerritorio={handleTerritorioClick}
-          onChangeEstado={handleEstadoChange}
           isOpen={showSidebar}
           onClose={() => setShowSidebar(false)}
         />
@@ -262,6 +273,11 @@ const Index = () => {
         onOpenChange={setShowObservacionDialog}
         onSubmit={handleCreateObservacion}
         coords={pendingPinCoords}
+      />
+
+      <UserManagementModal 
+        isOpen={isUserModalOpen} 
+        onClose={() => setIsUserModalOpen(false)} 
       />
 
       <OfflineIndicator />
