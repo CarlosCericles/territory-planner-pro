@@ -4,6 +4,23 @@ import 'leaflet/dist/leaflet.css';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 
+// --- ARREGLO DE ICONOS DE LEAFLET ---
+// Importamos las imágenes de los iconos directamente
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+// Borramos la configuración por defecto que busca archivos que no existen
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+
+// Configuramos los nuevos iconos
+L.Icon.Default.mergeOptions({
+  iconUrl: markerIcon,
+  iconRetinaUrl: markerIcon2x,
+  shadowUrl: markerShadow,
+});
+// ------------------------------------
+
 const BERNARDO_DE_IRIGOYEN = { lat: -26.2522, lng: -53.6497 };
 
 export function TerritoryMap({
@@ -25,40 +42,44 @@ export function TerritoryMap({
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
-    const map = L.map(mapContainerRef.current, {
-      tap: false, // Mejora compatibilidad táctil
-      zoomControl: true
-    }).setView([BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng], 15);
-    
+    const map = L.map(mapContainerRef.current).setView([BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     layersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     setMapReady(true);
-
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
-  // CAPTURA DE CLIC PARA OBSERVACIONES
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-
-    function onMapClick(e: L.LeafletMouseEvent) {
-      if (isAddingPin) {
-        console.log("📍 PIN SOLICITADO EN:", e.latlng);
-        if (selectedTerritorio && onAddObservacion) {
-          onAddObservacion(e.latlng, selectedTerritorio.id);
-        } else {
-          alert("Por favor, selecciona primero un territorio en la lista.");
-        }
+    const handleMapClick = (e: L.LeafletMouseEvent) => {
+      if (isAddingPin && selectedTerritorio && onAddObservacion) {
+        onAddObservacion(e.latlng, selectedTerritorio.id);
       }
-    }
-
-    map.on('click', onMapClick);
-    return () => { map.off('click', onMapClick); };
+    };
+    map.on('click', handleMapClick);
+    return () => { map.off('click', handleMapClick); };
   }, [isAddingPin, mapReady, onAddObservacion, selectedTerritorio]);
 
-  // RENDERIZADO GENERAL
+  // Herramientas de dibujo
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    if (isDrawingMode) {
+      map.pm.addControls({ position: 'topleft', drawPolygon: true });
+      map.pm.enableDraw('Polygon');
+      map.on('pm:create', (e: any) => {
+        onPolygonCreated?.(e.layer.toGeoJSON().geometry);
+        map.removeLayer(e.layer);
+      });
+    } else {
+      map.pm.disableDraw();
+      map.pm.removeControls();
+    }
+    return () => { map.off('pm:create'); };
+  }, [isDrawingMode, mapReady, onPolygonCreated]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
@@ -78,8 +99,8 @@ export function TerritoryMap({
           color: isSelected ? '#2563eb' : (t.estado === 'completado' ? '#22c55e' : 'transparent'),
           fillColor: color,
           fillOpacity: isSelected ? 0.5 : 0.3,
-          weight: isSelected ? 5 : 2,
-          interactive: !isAddingPin && !isEdgeEditMode // Importante: liberar el clic para el mapa
+          weight: isSelected ? 4 : 2,
+          interactive: !isAddingPin && !isEdgeEditMode
         }).addTo(layersRef.current!);
 
         if (!isAddingPin && !isEdgeEditMode) {
@@ -89,7 +110,6 @@ export function TerritoryMap({
           });
         }
 
-        // LADOS (Si está seleccionado)
         if (isSelected) {
           const hechos = t.lados_completados || [];
           for (let i = 0; i < coords.length - 1; i++) {
@@ -104,7 +124,6 @@ export function TerritoryMap({
             if (isEdgeEditMode) {
               line.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
-                console.log("✅ LADO TOCADO:", i);
                 onToggleEdge(t.id, i);
               });
             }
@@ -113,12 +132,13 @@ export function TerritoryMap({
       } catch (err) { console.error(err); }
     });
 
-    // DIBUJAR PINES EXISTENTES
+    // RENDERIZADO DE PINES CON ICONO CORREGIDO
     observaciones.forEach((obs: any) => {
       const c = obs.coordenadas || { lat: obs.lat, lng: obs.lng };
       if (c && c.lat && c.lng) {
-        L.marker([c.lat, c.lng]).addTo(layersRef.current!)
-          .bindPopup(obs.comentario || "Observación");
+        L.marker([c.lat, c.lng])
+          .addTo(layersRef.current!)
+          .bindPopup(`<b>Observación:</b><br>${obs.comentario || ''}`);
       }
     });
 
@@ -130,8 +150,7 @@ export function TerritoryMap({
       className="h-full w-full" 
       style={{ 
         minHeight: '600px', 
-        cursor: isAddingPin ? 'crosshair' : (isEdgeEditMode ? 'help' : 'grab'),
-        touchAction: 'none' 
+        cursor: isAddingPin ? 'crosshair' : (isEdgeEditMode ? 'help' : 'grab') 
       }} 
     />
   );
