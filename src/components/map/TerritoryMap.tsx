@@ -47,13 +47,12 @@ export function TerritoryMap({
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
-  // 2. EFECTO CLAVE: Activar/Desactivar Dibujo de Geoman
+  // 2. Activar/Desactivar Dibujo de Geoman
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
     if (isDrawingMode) {
-      // Activar modo dibujo de polígono
       // @ts-ignore
       map.pm.enableDraw('Polygon', {
         snappable: true,
@@ -63,24 +62,16 @@ export function TerritoryMap({
         hintlineStyle: { color: '#2563eb', dashArray: '5, 5' },
       });
 
-      // Escuchar cuando se termina el dibujo
       const handleCreate = (e: any) => {
         const { layer } = e;
         const geojson = layer.toGeoJSON().geometry;
-        
-        // Enviamos el polígono al padre (Index.tsx)
-        if (onPolygonCreated) {
-          onPolygonCreated(geojson);
-        }
-        
-        // Removemos el dibujo temporal (el formulario se encargará de guardarlo de forma definitiva)
+        if (onPolygonCreated) onPolygonCreated(geojson);
         map.removeLayer(layer);
         // @ts-ignore
         map.pm.disableDraw();
       };
 
       map.on('pm:create', handleCreate);
-
       return () => {
         map.off('pm:create', handleCreate);
         // @ts-ignore
@@ -92,7 +83,7 @@ export function TerritoryMap({
     }
   }, [isDrawingMode, mapReady, onPolygonCreated]);
 
-  // 3. Manejo de clics para Pines (Observaciones)
+  // 3. Manejo de clics para Pines
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -112,6 +103,7 @@ export function TerritoryMap({
 
     layersRef.current.clearLayers();
 
+    // Renderizado de Territorios
     territorios.forEach((t: any) => {
       const geo = t.geometria_poligono || t.poligono || t.geometria;
       if (!geo?.coordinates?.[0]) return;
@@ -138,31 +130,3 @@ export function TerritoryMap({
         if (isSelected) {
           const hechos = t.lados_completados || [];
           for (let i = 0; i < coords.length - 1; i++) {
-            const esHecho = hechos.includes(i);
-            const line = L.polyline([coords[i], coords[i+1]], {
-              color: esHecho ? '#22c55e' : (isEdgeEditMode ? '#2563eb' : '#9ca3af'),
-              weight: isEdgeEditMode ? 12 : (esHecho ? 8 : 4),
-              opacity: 1,
-              interactive: isEdgeEditMode
-            }).addTo(layersRef.current!);
-
-            if (isEdgeEditMode) {
-              line.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                onToggleEdge(t.id, i);
-              });
-            }
-          }
-        }
-      } catch (err) { console.error(err); }
-    });
-
-    observaciones.forEach((obs: any) => {
-      const c = obs.coordenadas || { lat: obs.lat, lng: obs.lng };
-      if (c && c.lat && c.lng) {
-        const marker = L.marker([c.lat, c.lng]).addTo(layersRef.current!);
-        const popupContent = document.createElement('div');
-        popupContent.innerHTML = `
-          <div style="padding: 5px;">
-            <p style="margin: 0 0 10px 0;"><b>Observación:</b><br>${obs.comentario || 'Sin texto'}</p>
-            ${isAdmin ? `<button id="btn-delete-${obs.id}" style="background: #ef4444;
