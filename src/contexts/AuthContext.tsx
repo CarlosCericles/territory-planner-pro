@@ -36,9 +36,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       
-      // Asignamos el rol obtenido o 'publicador' por defecto
       const role = data?.role || 'publicador';
-      console.log("Rol detectado:", role); // Útil para depurar en consola F12
+      console.log("Rol detectado:", role);
       setUserRole(role as AppRole);
     } catch (err) {
       console.error('Error in fetchUserRole:', err);
@@ -47,7 +46,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // 1. Escuchar cambios en el estado de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
         setSession(currentSession);
@@ -63,7 +61,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    // 2. Verificar sesión existente al cargar
     const initializeAuth = async () => {
       const { data: { session: existingSession } } = await supabase.auth.getSession();
       setSession(existingSession);
@@ -122,3 +119,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     signOut,
   };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
