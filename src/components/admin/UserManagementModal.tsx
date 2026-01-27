@@ -27,40 +27,41 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // 1. Obtenemos los perfiles (si full_name falla, lo manejamos)
+      // 1. Obtenemos perfiles sin pedir columnas específicas ni ordenar en el servidor
+      // Esto evita el error "column does not exist"
       const { data: profiles, error: pError } = await supabase
         .from('profiles')
-        .select('*'); // Seleccionamos todo para no fallar por nombre de columna
+        .select('*');
 
       if (pError) throw pError;
 
-      // 2. Obtenemos los roles de forma independiente para evitar errores de relación
+      // 2. Obtenemos los roles por separado
       const { data: roles, error: rError } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
       if (rError) throw rError;
 
-      // 3. Combinamos los datos manualmente
-      const formattedUsers = profiles.map((p: any) => {
-        // Buscamos si el campo se llama full_name, name o display_name
-        const name = p.full_name || p.name || p.display_name || p.email.split('@')[0];
+      // 3. Combinamos los datos con lógica flexible para los nombres
+      const formattedUsers = (profiles || []).map((p: any) => {
+        // Buscamos cualquier columna que se parezca a un nombre
+        const name = p.full_name || p.name || p.nombre || p.display_name || p.email?.split('@')[0] || 'Usuario';
         const userRole = roles?.find(r => r.user_id === p.id)?.role || 'publicador';
         
         return {
           id: p.id,
           name: name,
-          email: p.email,
+          email: p.email || 'Sin email',
           role: userRole
         };
       });
 
-      // Ordenamos por nombre
+      // Ordenamos en el cliente para evitar errores de SQL
       setUsers(formattedUsers.sort((a, b) => a.name.localeCompare(b.name)));
       
     } catch (error: any) {
-      console.error("Error al cargar usuarios:", error);
-      toast.error("Error al cargar la lista de equipo");
+      console.error("Error crítico al cargar usuarios:", error);
+      toast.error("Error de conexión con la base de datos");
     } finally {
       setLoading(false);
     }
@@ -82,16 +83,16 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
 
       if (error) throw error;
       
-      toast.success(`Rol actualizado a ${newRole}`);
+      toast.success(`Permisos actualizados`);
       fetchUsers();
     } catch (error: any) {
       console.error("Error al cambiar rol:", error);
-      toast.error("No se pudo actualizar el permiso");
+      toast.error("No se pudo cambiar el rol");
     }
   };
 
   const deleteUser = async (userId: string) => {
-    if (!confirm("¿Estás seguro de eliminar este usuario? Esto borrará su acceso.")) return;
+    if (!confirm("¿Eliminar este usuario del equipo?")) return;
     
     try {
       const { error } = await supabase
@@ -105,7 +106,7 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
       fetchUsers();
     } catch (error: any) {
       console.error("Error al eliminar:", error);
-      toast.error("Error al eliminar usuario");
+      toast.error("Error al eliminar");
     }
   };
 
@@ -118,7 +119,7 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
             Gestión de Equipo
           </DialogTitle>
           <DialogDescription>
-            Administra los permisos de los publicadores y administradores.
+            Aquí puedes ver y cambiar los permisos de los hermanos.
           </DialogDescription>
         </DialogHeader>
 
@@ -131,8 +132,8 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>Estado</TableHead>
+                  <TableHead>Nombre / Email</TableHead>
+                  <TableHead>Rol</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -140,7 +141,7 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
                 {users.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                      No hay otros usuarios registrados.
+                      No hay usuarios registrados en la tabla de perfiles.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -164,17 +165,27 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
                         <Button 
                           variant="outline" 
                           size="sm"
-                          className="h-8"
                           onClick={() => toggleAdmin(u.id, u.role)}
                         >
                           <UserCheck className="w-4 h-4 mr-1 text-blue-600" />
-                          {u.role === 'admin' ? "Bajar a Publicador" : "Hacer Admin"}
+                          Cambiar Rol
                         </Button>
                         <Button 
                           variant="destructive" 
                           size="icon"
-                          className="h-8 w-8"
                           onClick={() => deleteUser(u.id)}
                         >
                           <Trash2 className="w-4 h-4" />
-                        </
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
