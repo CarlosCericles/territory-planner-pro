@@ -22,36 +22,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchUserRole = (userId: string) => {
-    setTimeout(async () => {
-      try {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', userId)
-          .maybeSingle();
-        
-        if (error) {
-          console.error('Error fetching user role:', error);
-          return;
-        }
-        
-        setUserRole(data?.role as AppRole || 'publicador');
-      } catch (err) {
-        console.error('Error in fetchUserRole:', err);
+  const fetchUserRole = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      if (error) {
+        console.error('Error fetching user role:', error);
+        setUserRole('publicador');
+        return;
       }
-    }, 0);
+      
+      // Asignamos el rol obtenido o 'publicador' por defecto
+      const role = data?.role || 'publicador';
+      console.log("Rol detectado:", role); // Útil para depurar en consola F12
+      setUserRole(role as AppRole);
+    } catch (err) {
+      console.error('Error in fetchUserRole:', err);
+      setUserRole('publicador');
+    }
   };
 
   useEffect(() => {
-    // Set up auth state listener FIRST
+    // 1. Escuchar cambios en el estado de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+      async (event, currentSession) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
         
-        if (session?.user) {
-          fetchUserRole(session.user.id);
+        if (currentSession?.user) {
+          await fetchUserRole(currentSession.user.id);
         } else {
           setUserRole(null);
         }
@@ -60,17 +63,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    // 2. Verificar sesión existente al cargar
+    const initializeAuth = async () => {
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      setSession(existingSession);
+      setUser(existingSession?.user ?? null);
       
-      if (session?.user) {
-        fetchUserRole(session.user.id);
+      if (existingSession?.user) {
+        await fetchUserRole(existingSession.user.id);
       }
       
       setIsLoading(false);
-    });
+    };
+
+    initializeAuth();
 
     return () => subscription.unsubscribe();
   }, []);
@@ -116,18 +122,3 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     signOut,
   };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
