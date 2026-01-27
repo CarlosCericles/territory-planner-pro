@@ -4,22 +4,16 @@ import 'leaflet/dist/leaflet.css';
 import '@geoman-io/leaflet-geoman-free';
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 
-// --- ARREGLO DE ICONOS DE LEAFLET ---
-// Importamos las imágenes de los iconos directamente
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
-// Borramos la configuración por defecto que busca archivos que no existen
 delete (L.Icon.Default.prototype as any)._getIconUrl;
-
-// Configuramos los nuevos iconos
 L.Icon.Default.mergeOptions({
   iconUrl: markerIcon,
   iconRetinaUrl: markerIcon2x,
   shadowUrl: markerShadow,
 });
-// ------------------------------------
 
 const BERNARDO_DE_IRIGOYEN = { lat: -26.2522, lng: -53.6497 };
 
@@ -31,9 +25,11 @@ export function TerritoryMap({
   onPolygonCreated,
   onAddObservacion,
   onToggleEdge,
+  onDeleteObservacion, // <-- Nueva prop para borrar
   isDrawingMode = false,
   isAddingPin = false,
   isEdgeEditMode = false,
+  isAdmin = false,     // <-- Nueva prop para saber si mostrar el botón de borrar
 }: any) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -62,34 +58,17 @@ export function TerritoryMap({
     return () => { map.off('click', handleMapClick); };
   }, [isAddingPin, mapReady, onAddObservacion, selectedTerritorio]);
 
-  // Herramientas de dibujo
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    if (isDrawingMode) {
-      map.pm.addControls({ position: 'topleft', drawPolygon: true });
-      map.pm.enableDraw('Polygon');
-      map.on('pm:create', (e: any) => {
-        onPolygonCreated?.(e.layer.toGeoJSON().geometry);
-        map.removeLayer(e.layer);
-      });
-    } else {
-      map.pm.disableDraw();
-      map.pm.removeControls();
-    }
-    return () => { map.off('pm:create'); };
-  }, [isDrawingMode, mapReady, onPolygonCreated]);
-
+  // Renderizado de capas
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
 
     layersRef.current.clearLayers();
 
+    // --- Renderizado de Territorios ---
     territorios.forEach((t: any) => {
       const geo = t.geometria_poligono || t.poligono || t.geometria;
       if (!geo?.coordinates?.[0]) return;
-
       try {
         const coords = geo.coordinates[0].map((c: any) => [c[1], c[0]] as L.LatLngTuple);
         const isSelected = t.id === selectedTerritorio?.id;
@@ -132,26 +111,38 @@ export function TerritoryMap({
       } catch (err) { console.error(err); }
     });
 
-    // RENDERIZADO DE PINES CON ICONO CORREGIDO
+    // --- Renderizado de Observaciones (Pines) ---
     observaciones.forEach((obs: any) => {
       const c = obs.coordenadas || { lat: obs.lat, lng: obs.lng };
       if (c && c.lat && c.lng) {
-        L.marker([c.lat, c.lng])
-          .addTo(layersRef.current!)
-          .bindPopup(`<b>Observación:</b><br>${obs.comentario || ''}`);
+        const marker = L.marker([c.lat, c.lng]).addTo(layersRef.current!);
+        
+        // Crear el contenido del Popup
+        const popupContent = document.createElement('div');
+        popupContent.innerHTML = `
+          <div style="padding: 5px;">
+            <p style="margin: 0 0 10px 0;"><b>Observación:</b><br>${obs.comentario || 'Sin texto'}</p>
+            ${isAdmin ? `<button id="btn-delete-${obs.id}" style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; width: 100%;">Eliminar</button>` : ''}
+          </div>
+        `;
+
+        // Escuchar el clic en el botón de eliminar después de que se abra el popup
+        marker.bindPopup(popupContent);
+        marker.on('popupopen', () => {
+          if (isAdmin) {
+            const btn = document.getElementById(`btn-delete-${obs.id}`);
+            btn?.addEventListener('click', () => {
+              if (confirm('¿Estás seguro de que deseas eliminar esta observación?')) {
+                onDeleteObservacion(obs.id);
+                map.closePopup();
+              }
+            });
+          }
+        });
       }
     });
 
-  }, [territorios, observaciones, selectedTerritorio, isEdgeEditMode, isAddingPin, mapReady]);
+  }, [territorios, observaciones, selectedTerritorio, isEdgeEditMode, isAddingPin, mapReady, isAdmin]);
 
-  return (
-    <div 
-      ref={mapContainerRef} 
-      className="h-full w-full" 
-      style={{ 
-        minHeight: '600px', 
-        cursor: isAddingPin ? 'crosshair' : (isEdgeEditMode ? 'help' : 'grab') 
-      }} 
-    />
-  );
+  return <div ref={mapContainerRef} className="h-full w-full" style={{ minHeight: '600px', cursor: isAddingPin ? 'crosshair' : (isEdgeEditMode ? 'help' : 'grab') }} />;
 }
