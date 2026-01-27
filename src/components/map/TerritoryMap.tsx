@@ -38,22 +38,50 @@ export function TerritoryMap({
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
-    const map = L.map(mapContainerRef.current).setView([BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // Configuración de las dos capas base
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    });
+
+    const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    });
+
+    // Inicializar mapa con la capa de calles por defecto
+    const map = L.map(mapContainerRef.current, {
+      center: [BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng],
+      zoom: 15,
+      layers: [osm] // Capa inicial
+    });
+
+    // Añadir el selector de capas arriba a la derecha
+    const baseMaps = {
+      "Mapa de Calles": osm,
+      "Satélite": satelite
+    };
+    L.control.layers(baseMaps, {}, { position: 'topright' }).addTo(map);
+
     layersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     setMapReady(true);
-    return () => { map.remove(); mapRef.current = null; };
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
   }, []);
 
-  // --- CAPTURA DE CLIC PARA PIN (BLINDADA) ---
+  // --- CAPTURA DE CLIC PARA PIN (MANTIENE LA PROTECCIÓN) ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
     function handleMapClick(e: L.LeafletMouseEvent) {
       if (isAddingPin && selectedTerritorio && onAddObservacion) {
-        L.DomEvent.stop(e); // Detiene cualquier otro proceso
+        L.DomEvent.stop(e);
         onAddObservacion(e.latlng);
       }
     }
@@ -91,7 +119,7 @@ export function TerritoryMap({
     }
   }, [isDrawingMode, mapReady, onPolygonCreated]);
 
-  // --- RENDERIZADO DE CAPAS (CON LÓGICA DE LADOS LIMPIOS) ---
+  // --- RENDERIZADO DE CAPAS (LÓGICA DE TERRITORIOS Y BORDES LIMPIOS) ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
@@ -105,13 +133,11 @@ export function TerritoryMap({
       const isCompletado = t.estado === 'completado';
       const color = isCompletado ? '#22c55e' : (t.estado === 'iniciado' ? '#f97316' : '#9ca3af');
 
-      // Polígono Principal
       const poly = L.polygon(coords, {
         color: isSelected ? '#2563eb' : (isCompletado ? '#16a34a' : 'transparent'),
         fillColor: color,
         fillOpacity: isSelected ? 0.4 : 0.2,
         weight: isCompletado ? 3 : 2,
-        // Si estamos poniendo un PIN, el polígono NO debe ser interactivo para dejar pasar el clic
         interactive: !isAddingPin && !isDrawingMode 
       }).addTo(layersRef.current!);
 
@@ -126,55 +152,9 @@ export function TerritoryMap({
         });
       }
 
-      // Dibujo de Lados (Solo si no está completado o si estamos editando)
       if (isSelected || (t.estado === 'iniciado' && !isCompletado)) {
         const hechos = t.lados_completados || [];
         for (let i = 0; i < coords.length - 1; i++) {
           const esHecho = hechos.includes(i);
-          
-          // Solo dibujar línea gruesa si estamos editando o si el lado está hecho pero el territorio sigue pendiente
           if (isEdgeEditMode || (esHecho && !isCompletado)) {
-            const line = L.polyline([coords[i], coords[i+1]], {
-              color: esHecho ? '#22c55e' : (isEdgeEditMode ? '#2563eb' : '#9ca3af'),
-              weight: isEdgeEditMode ? 10 : 5,
-              opacity: 1,
-              interactive: isEdgeEditMode && !isAddingPin
-            }).addTo(layersRef.current!);
-
-            if (isEdgeEditMode && !isAddingPin) {
-              line.on('click', (e) => {
-                L.DomEvent.stopPropagation(e);
-                onToggleEdge(t.id, i);
-              });
-            }
-          }
-        }
-      }
-    });
-
-    // Observaciones
-    observaciones.forEach((obs: any) => {
-      const c = obs.coordenadas;
-      if (c?.lat && c?.lng) {
-        const marker = L.marker([c.lat, c.lng]).addTo(layersRef.current!);
-        const cont = document.createElement('div');
-        cont.innerHTML = `<b>Obs:</b><br>${obs.comentario || ''}`;
-        if (isAdmin) {
-          const btn = document.createElement('button');
-          btn.innerText = 'Eliminar';
-          btn.style.cssText = "background:#ef4444;color:white;border:none;width:100%;margin-top:8px;cursor:pointer;padding:4px;border-radius:4px";
-          btn.onclick = () => { if(confirm('¿Eliminar?')){ onDeleteObservacion(obs.id); map.closePopup(); } };
-          cont.appendChild(btn);
-        }
-        marker.bindPopup(cont);
-      }
-    });
-  }, [territorios, observaciones, selectedTerritorio, isDrawingMode, isAddingPin, isEdgeEditMode, mapReady, isAdmin]);
-
-  return (
-    <>
-      <style>{`.number-tooltip { background: rgba(255, 255, 255, 0.6) !important; border: none !important; box-shadow: none !important; pointer-events: none !important; }`}</style>
-      <div ref={mapContainerRef} className="h-full w-full" style={{ minHeight: '600px', zIndex: 0 }} />
-    </>
-  );
-}
+            const
