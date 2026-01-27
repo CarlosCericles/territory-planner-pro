@@ -30,74 +30,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle();
       
-      if (error) {
-        console.error('Error fetching user role:', error);
-        setUserRole('publicador');
-        return;
-      }
-      
-      const role = data?.role || 'publicador';
-      console.log("Rol detectado:", role);
-      setUserRole(role as AppRole);
+      if (error) throw error;
+      setUserRole((data?.role as AppRole) || 'publicador');
     } catch (err) {
-      console.error('Error in fetchUserRole:', err);
-      setUserRole('publicador');
+      console.error('Error fetching role:', err);
+      setUserRole('publicador'); // Fallback para que no se quede bloqueado
     }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, currentSession) => {
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
-        
-        if (currentSession?.user) {
-          await fetchUserRole(currentSession.user.id);
-        } else {
-          setUserRole(null);
+    // Inicialización rápida
+    const initialize = async () => {
+      try {
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        setSession(initialSession);
+        setUser(initialSession?.user ?? null);
+        if (initialSession?.user) {
+          await fetchUserRole(initialSession.user.id);
         }
-        
-        setIsLoading(false);
+      } catch (err) {
+        console.error("Initialization error:", err);
+      } finally {
+        setIsLoading(false); // IMPORTANTE: Siempre termina la carga
       }
-    );
-
-    const initializeAuth = async () => {
-      const { data: { session: existingSession } } = await supabase.auth.getSession();
-      setSession(existingSession);
-      setUser(existingSession?.user ?? null);
-      
-      if (existingSession?.user) {
-        await fetchUserRole(existingSession.user.id);
-      }
-      
-      setIsLoading(false);
     };
 
-    initializeAuth();
+    initialize();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      if (currentSession?.user) {
+        await fetchUserRole(currentSession.user.id);
+      } else {
+        setUserRole(null);
+      }
+      setIsLoading(false);
+    });
 
     return () => subscription.unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-        },
-      },
+      options: { data: { full_name: fullName } },
     });
     return { error: error as Error | null };
   };
@@ -120,17 +103,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
-}
+};
