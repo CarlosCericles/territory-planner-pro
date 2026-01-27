@@ -10,7 +10,8 @@ import { UserMenu } from '@/components/layout/UserMenu';
 import { OfflineIndicator } from '@/components/layout/OfflineIndicator';
 import { CreateTerritorioForm } from '@/components/territory/CreateTerritorioForm';
 import { ObservacionForm } from '@/components/territory/ObservacionForm';
-import { UserManagementModal } from "@/components/admin/UserManagementModal.tsx";
+// CORRECCIÓN: Eliminada la extensión .tsx para evitar errores de carga en Vercel
+import { UserManagementModal } from "@/components/admin/UserManagementModal";
 import { Button } from '@/components/ui/button';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
 import type { Polygon } from 'geojson';
@@ -23,7 +24,6 @@ const Index = () => {
   const { territorios, isLoading: territoriosLoading, createTerritorio, updateEstado } = useTerritorios();
   const [selectedTerritorio, setSelectedTerritorio] = useState<Territorio | null>(null);
   
-  // Hook de observaciones
   const { observaciones: allObservaciones } = useObservaciones();
   const { 
     observaciones, 
@@ -37,11 +37,10 @@ const Index = () => {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showObservacionDialog, setShowObservacionDialog] = useState(false);
-  const [isUserModalOpen, setIsUserModalOpen] = useState(false); // Estado para el modal de usuarios
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [pendingPolygon, setPendingPolygon] = useState<Polygon | null>(null);
   const [pendingPinCoords, setPendingPinCoords] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Redirección si no hay sesión
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/auth');
