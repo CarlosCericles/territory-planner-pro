@@ -39,7 +39,7 @@ export function TerritoryMap({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // Configuración de las dos capas base
+    // 1. Definir capas base
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap'
@@ -47,22 +47,22 @@ export function TerritoryMap({
 
     const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19,
-      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+      attribution: 'Tiles &copy; Esri'
     });
 
-    // Inicializar mapa con la capa de calles por defecto
+    // 2. Crear mapa
     const map = L.map(mapContainerRef.current, {
       center: [BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng],
       zoom: 15,
-      layers: [osm] // Capa inicial
+      layers: [osm] // Empezar con calles
     });
 
-    // Añadir el selector de capas arriba a la derecha
-    const baseMaps = {
+    // 3. Añadir Control de Capas (Botón arriba a la derecha)
+    const baseLayers = {
       "Mapa de Calles": osm,
-      "Satélite": satelite
+      "Vista Satelital": satelite
     };
-    L.control.layers(baseMaps, {}, { position: 'topright' }).addTo(map);
+    L.control.layers(baseLayers, {}, { position: 'topright' }).addTo(map);
 
     layersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -71,10 +71,11 @@ export function TerritoryMap({
     return () => {
       map.remove();
       mapRef.current = null;
+      setMapReady(false);
     };
   }, []);
 
-  // --- CAPTURA DE CLIC PARA PIN (MANTIENE LA PROTECCIÓN) ---
+  // --- CAPTURA DE CLIC PARA PIN (CON PROTECCIÓN) ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -88,10 +89,8 @@ export function TerritoryMap({
 
     if (isAddingPin) {
       map.on('click', handleMapClick);
-      mapContainerRef.current!.style.cursor = 'crosshair';
     } else {
       map.off('click', handleMapClick);
-      mapContainerRef.current!.style.cursor = '';
     }
     return () => { map.off('click', handleMapClick); };
   }, [isAddingPin, mapReady, selectedTerritorio, onAddObservacion]);
@@ -119,7 +118,7 @@ export function TerritoryMap({
     }
   }, [isDrawingMode, mapReady, onPolygonCreated]);
 
-  // --- RENDERIZADO DE CAPAS (LÓGICA DE TERRITORIOS Y BORDES LIMPIOS) ---
+  // --- RENDERIZADO DE CAPAS (TERRITORIOS Y BORDES) ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
@@ -157,4 +156,53 @@ export function TerritoryMap({
         for (let i = 0; i < coords.length - 1; i++) {
           const esHecho = hechos.includes(i);
           if (isEdgeEditMode || (esHecho && !isCompletado)) {
-            const
+            const line = L.polyline([coords[i], coords[i+1]], {
+              color: esHecho ? '#22c55e' : (isEdgeEditMode ? '#2563eb' : '#9ca3af'),
+              weight: isEdgeEditMode ? 10 : 5,
+              opacity: 1,
+              interactive: isEdgeEditMode && !isAddingPin
+            }).addTo(layersRef.current!);
+
+            if (isEdgeEditMode && !isAddingPin) {
+              line.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                onToggleEdge(t.id, i);
+              });
+            }
+          }
+        }
+      }
+    });
+
+    observaciones.forEach((obs: any) => {
+      const c = obs.coordenadas;
+      if (c?.lat && c?.lng) {
+        const marker = L.marker([c.lat, c.lng]).addTo(layersRef.current!);
+        const cont = document.createElement('div');
+        cont.innerHTML = `<b>Obs:</b><br>${obs.comentario || ''}`;
+        if (isAdmin) {
+          const btn = document.createElement('button');
+          btn.innerText = 'Eliminar';
+          btn.style.cssText = "background:#ef4444;color:white;border:none;width:100%;margin-top:8px;cursor:pointer;padding:4px;border-radius:4px";
+          btn.onclick = () => { if(confirm('¿Eliminar?')){ onDeleteObservacion(obs.id); map.closePopup(); } };
+          cont.appendChild(btn);
+        }
+        marker.bindPopup(cont);
+      }
+    });
+  }, [territorios, observaciones, selectedTerritorio, isDrawingMode, isAddingPin, isEdgeEditMode, mapReady, isAdmin]);
+
+  return (
+    <>
+      <style>{`
+        .number-tooltip { background: rgba(255, 255, 255, 0.6) !important; border: none !important; box-shadow: none !important; pointer-events: none !important; }
+        .leaflet-control-layers { border-radius: 8px !important; box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important; border: none !important; }
+      `}</style>
+      <div 
+        ref={mapContainerRef} 
+        className="h-full w-full" 
+        style={{ minHeight: '600px', cursor: (isDrawingMode || isAddingPin) ? 'crosshair' : 'grab', zIndex: 0 }} 
+      />
+    </>
+  );
+}
