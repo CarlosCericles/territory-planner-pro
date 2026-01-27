@@ -38,7 +38,8 @@ export function TerritorySidebar({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent side="left" className="w-[300px] sm:w-[400px] p-0">
+      {/* Se añadió z-[9999] para que la barra lateral gane prioridad sobre el mapa */}
+      <SheetContent side="left" className="w-[300px] sm:w-[400px] p-0 z-[9999]">
         <SheetHeader className="p-6 border-b">
           <SheetTitle className="flex items-center gap-2">
             <MapPin className="w-5 h-5 text-primary" />
