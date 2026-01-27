@@ -1,6 +1,5 @@
 import React from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MapPin, CheckCircle2, Circle, Clock } from 'lucide-react';
@@ -11,7 +10,6 @@ interface TerritorySidebarProps {
   observaciones: any[];
   selectedTerritorio: Territorio | null;
   onSelectTerritorio: (t: Territorio) => void;
-  onChangeEstado: (estado: TerritorioEstado) => void;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -38,7 +36,7 @@ export function TerritorySidebar({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      {/* Se añadió z-[9999] para que la barra lateral gane prioridad sobre el mapa */}
+      {/* El z-[9999] asegura que la barra esté arriba, pero el overlay ahora no tapará el Header si el Header tiene un z-index alto */}
       <SheetContent side="left" className="w-[300px] sm:w-[400px] p-0 z-[9999]">
         <SheetHeader className="p-6 border-b">
           <SheetTitle className="flex items-center gap-2">
@@ -49,45 +47,33 @@ export function TerritorySidebar({
         
         <ScrollArea className="h-[calc(100vh-100px)]">
           <div className="p-4 space-y-4">
-            {territorios.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">No hay territorios creados.</p>
-            ) : (
-              territorios.map((t) => {
-                const isSelected = selectedTerritorio?.id === t.id;
-                const obsCount = observaciones.filter(o => o.territorio_id === t.id).length;
+            {territorios.map((t) => {
+              const isSelected = selectedTerritorio?.id === t.id;
+              const obsCount = observaciones.filter(o => o.territorio_id === t.id).length;
 
-                return (
-                  <div
-                    key={t.id}
-                    className={`p-4 rounded-lg border transition-all cursor-pointer hover:border-primary/50 ${
-                      isSelected ? 'border-primary bg-primary/5 shadow-md' : 'bg-card'
-                    }`}
-                    onClick={() => {
-                      onSelectTerritorio(t);
-                      onClose();
-                    }}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-lg">Territorio {t.numero}</h3>
-                      {getStatusBadge(t.estado)}
-                    </div>
-                    
-                    {t.nombre && (
-                      <p className="text-sm text-muted-foreground mb-3">{t.nombre}</p>
-                    )}
-
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> {obsCount} Obs.
-                      </span>
-                      <span className="flex items-center gap-1">
-                        Lados: {t.lados_completados?.length || 0}
-                      </span>
-                    </div>
+              return (
+                <div
+                  key={t.id}
+                  className={`p-4 rounded-lg border transition-all cursor-pointer hover:border-primary/50 ${
+                    isSelected ? 'border-primary bg-primary/5 shadow-md' : 'bg-card'
+                  }`}
+                  onClick={() => {
+                    onSelectTerritorio(t);
+                    onClose();
+                  }}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-lg">Territorio {t.numero}</h3>
+                    {getStatusBadge(t.estado)}
                   </div>
-                );
-              })
-            )}
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" /> {obsCount} Obs.
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </ScrollArea>
       </SheetContent>
