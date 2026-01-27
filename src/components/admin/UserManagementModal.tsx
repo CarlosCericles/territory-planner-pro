@@ -26,18 +26,33 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // Intentamos obtener los perfiles. 
-      // Si tu tabla de Supabase tiene otro nombre (ej. 'user_profiles'), cámbialo aquí.
+      // Consulta combinada: trae perfiles y busca el rol en la tabla user_roles
       const { data, error } = await supabase
-        .from('profiles') 
-        .select('*')
-        .order('created_at', { ascending: false });
+        .from('profiles')
+        .select(`
+          id,
+          full_name,
+          email,
+          user_roles (
+            role
+          )
+        `)
+        .order('full_name', { ascending: true });
 
       if (error) throw error;
-      setUsers(data || []);
+
+      // Formateamos los datos para que el componente use "role" directamente
+      const formattedUsers = data?.map(u => ({
+        id: u.id,
+        full_name: u.full_name,
+        email: u.email,
+        role: u.user_roles?.[0]?.role || 'publisher'
+      })) || [];
+
+      setUsers(formattedUsers);
     } catch (error: any) {
-      console.error("Error fetchUsers:", error);
-      toast.error("Error al cargar la lista de usuarios");
+      console.error("Error al cargar usuarios:", error);
+      toast.error("Error al cargar la lista de equipo");
     } finally {
       setLoading(false);
     }
@@ -50,24 +65,29 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
   const toggleAdmin = async (userId: string, currentRole: string) => {
     const newRole = currentRole === 'admin' ? 'publisher' : 'admin';
     try {
+      // Actualizamos en la tabla user_roles usando upsert (crear o actualizar)
       const { error } = await supabase
-        .from('profiles')
-        .update({ role: newRole })
-        .eq('id', userId);
+        .from('user_roles')
+        .upsert({ 
+          user_id: userId, 
+          role: newRole 
+        }, { onConflict: 'user_id' });
 
       if (error) throw error;
       
-      toast.success(`Usuario actualizado a ${newRole}`);
+      toast.success(`Rol actualizado a ${newRole}`);
       fetchUsers();
     } catch (error: any) {
-      toast.error("No se pudo cambiar el rol");
+      console.error("Error al cambiar rol:", error);
+      toast.error("No se pudo actualizar el permiso");
     }
   };
 
   const deleteUser = async (userId: string) => {
-    if (!confirm("¿Estás seguro de eliminar este usuario?")) return;
+    if (!confirm("¿Estás seguro de eliminar este usuario? Esto borrará su perfil.")) return;
     
     try {
+      // Al borrar de profiles, por la configuración de Supabase, se debería borrar en cascada
       const { error } = await supabase
         .from('profiles')
         .delete()
@@ -75,10 +95,11 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
 
       if (error) throw error;
       
-      toast.success("Usuario eliminado de la base de datos");
+      toast.success("Usuario eliminado correctamente");
       fetchUsers();
     } catch (error: any) {
-      toast.error("Error al eliminar el usuario");
+      console.error("Error al eliminar:", error);
+      toast.error("Error al intentar eliminar el usuario");
     }
   };
 
@@ -123,7 +144,10 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={u.role === 'admin' ? "default" : "outline"} className={u.role === 'admin' ? "bg-blue-600" : ""}>
+                        <Badge 
+                          variant={u.role === 'admin' ? "default" : "outline"} 
+                          className={u.role === 'admin' ? "bg-blue-600 text-white" : ""}
+                        >
                           {u.role === 'admin' ? "Administrador" : "Publicador"}
                         </Badge>
                       </TableCell>
