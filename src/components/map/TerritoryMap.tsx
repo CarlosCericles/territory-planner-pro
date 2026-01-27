@@ -46,6 +46,7 @@ export function TerritoryMap({
     return () => { map.remove(); mapRef.current = null; };
   }, []);
 
+  // Control de Dibujo Geoman (Polígonos nuevos)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -71,9 +72,32 @@ export function TerritoryMap({
     }
   }, [isDrawingMode, mapReady, onPolygonCreated]);
 
+  // Manejo de clic para añadir PIN
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const handleMapClick = (e: L.LeafletMouseEvent) => {
+      // SOLO si estamos en modo pin y hay un territorio seleccionado
+      if (isAddingPin && selectedTerritorio && onAddObservacion) {
+        onAddObservacion(e.latlng);
+      }
+    };
+
+    if (isAddingPin) {
+      map.on('click', handleMapClick);
+    } else {
+      map.off('click', handleMapClick);
+    }
+
+    return () => { map.off('click', handleMapClick); };
+  }, [isAddingPin, mapReady, onAddObservacion, selectedTerritorio]);
+
+  // Renderizado de capas (Territorios, Lados y Observaciones)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
+
     layersRef.current.clearLayers();
 
     territorios.forEach((t: any) => {
@@ -83,42 +107,65 @@ export function TerritoryMap({
       const isSelected = t.id === selectedTerritorio?.id;
       const color = t.estado === 'completado' ? '#22c55e' : (t.estado === 'iniciado' ? '#f97316' : '#9ca3af');
 
-      L.polygon(coords, {
+      // Polígono base
+      const poly = L.polygon(coords, {
         color: isSelected ? '#2563eb' : 'transparent',
         fillColor: color,
-        fillOpacity: isSelected ? 0.5 : 0.3,
-        weight: isSelected ? 3 : 1,
-        interactive: !isDrawingMode && !isAddingPin
-      }).addTo(layersRef.current!).on('click', (e) => {
-        if (!isDrawingMode && !isAddingPin) {
+        fillOpacity: isSelected ? 0.4 : 0.2,
+        weight: isSelected ? 2 : 1,
+        interactive: !isDrawingMode && !isAddingPin && !isEdgeEditMode
+      }).addTo(layersRef.current!);
+
+      if (!isDrawingMode && !isAddingPin && !isEdgeEditMode) {
+        poly.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
           onSelectTerritorio(t);
+        });
+      }
+
+      // Dibujo de LADOS (Solo si está seleccionado)
+      if (isSelected) {
+        const hechos = t.lados_completados || [];
+        for (let i = 0; i < coords.length - 1; i++) {
+          const esHecho = hechos.includes(i);
+          const line = L.polyline([coords[i], coords[i+1]], {
+            color: esHecho ? '#22c55e' : (isEdgeEditMode ? '#2563eb' : '#9ca3af'),
+            weight: isEdgeEditMode ? 12 : (esHecho ? 6 : 3),
+            opacity: 1,
+            interactive: isEdgeEditMode
+          }).addTo(layersRef.current!);
+
+          if (isEdgeEditMode) {
+            line.on('click', (e) => {
+              L.DomEvent.stopPropagation(e);
+              onToggleEdge(t.id, i);
+            });
+          }
         }
-      });
+      }
     });
 
+    // Marcadores de Observaciones
     observaciones.forEach((obs: any) => {
       const c = obs.coordenadas;
       if (c?.lat && c?.lng) {
         const marker = L.marker([c.lat, c.lng]).addTo(layersRef.current!);
-        const cont = document.createElement('div');
-        cont.innerHTML = `<b>Observación:</b><br>${obs.comentario || 'Sin texto'}`;
+        
+        const container = document.createElement('div');
+        container.innerHTML = `<div style="min-width:150px"><p><b>Obs:</b> ${obs.comentario || ''}</p></div>`;
+        
         if (isAdmin) {
           const btn = document.createElement('button');
           btn.innerText = 'Eliminar';
-          btn.style.cssText = "background:#ef4444;color:white;border:none;width:100%;margin-top:8px;padding:4px;cursor:pointer;border-radius:4px";
-          btn.onclick = () => { 
-            if(confirm('¿Eliminar observación?')) {
-              onDeleteObservacion(obs.id); 
-              map.closePopup(); 
-            }
-          };
-          cont.appendChild(btn);
+          btn.style.cssText = "background:#ef4444;color:white;border:none;width:100%;margin-top:8px;cursor:pointer;padding:4px;border-radius:4px";
+          btn.onclick = () => { if(confirm('¿Eliminar?')){ onDeleteObservacion(obs.id); map.closePopup(); } };
+          container.appendChild(btn);
         }
-        marker.bindPopup(cont);
+        marker.bindPopup(container);
       }
     });
-  }, [territorios, observaciones, selectedTerritorio, isDrawingMode, isAddingPin, mapReady, isAdmin]);
+
+  }, [territorios, observaciones, selectedTerritorio, isDrawingMode, isAddingPin, isEdgeEditMode, mapReady, isAdmin]);
 
   return (
     <div 
@@ -126,8 +173,7 @@ export function TerritoryMap({
       className="h-full w-full" 
       style={{ 
         minHeight: '600px', 
-        cursor: isDrawingMode || isAddingPin ? 'crosshair' : 'grab',
-        zIndex: 1 // Aseguramos que el mapa tenga un z-index base bajo
+        cursor: (isDrawingMode || isAddingPin) ? 'crosshair' : (isEdgeEditMode ? 'pointer' : 'grab') 
       }} 
     />
   );
