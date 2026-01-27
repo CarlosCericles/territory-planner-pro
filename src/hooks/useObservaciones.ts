@@ -10,6 +10,7 @@ export function useObservaciones(territorioId?: string) {
   const { toast } = useToast();
   const { user } = useAuth();
 
+  // 1. Obtener las observaciones
   const query = useQuery({
     queryKey: ['observaciones', territorioId],
     queryFn: async () => {
@@ -30,6 +31,7 @@ export function useObservaciones(territorioId?: string) {
     enabled: !!territorioId || territorioId === undefined,
   });
 
+  // 2. Crear nueva observación
   const createObservacion = useMutation({
     mutationFn: async (observacion: {
       territorio_id: string;
@@ -50,6 +52,7 @@ export function useObservaciones(territorioId?: string) {
         .single();
 
       if (error) {
+        // Lógica para modo Offline
         if (!navigator.onLine) {
           addPendingChange({
             type: 'create',
@@ -74,15 +77,16 @@ export function useObservaciones(territorioId?: string) {
         description: 'El pin se ha agregado correctamente',
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
-        title: 'Error',
+        title: 'Error al crear',
         description: error.message,
         variant: 'destructive',
       });
     },
   });
 
+  // 3. Editar observación existente
   const updateObservacion = useMutation({
     mutationFn: async ({ 
       id, 
@@ -107,15 +111,16 @@ export function useObservaciones(territorioId?: string) {
         title: 'Observación actualizada',
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
-        title: 'Error',
+        title: 'Error al actualizar',
         description: error.message,
         variant: 'destructive',
       });
     },
   });
 
+  // 4. Eliminar observación (Esta es la que conectaremos al mapa)
   const deleteObservacion = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -126,14 +131,16 @@ export function useObservaciones(territorioId?: string) {
       if (error) throw error;
     },
     onSuccess: () => {
+      // Importante: Invalida tanto la lista general como la del territorio
       queryClient.invalidateQueries({ queryKey: ['observaciones'] });
       toast({
         title: 'Observación eliminada',
+        description: 'El marcador ha sido removido del mapa',
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
-        title: 'Error',
+        title: 'Error al eliminar',
         description: error.message,
         variant: 'destructive',
       });
