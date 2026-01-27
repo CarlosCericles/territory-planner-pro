@@ -23,31 +23,26 @@ export function TerritorySidebar({
   onClose
 }: TerritorySidebarProps) {
   
-  // FUNCIÓN DE PRIORIDAD CORREGIDA:
-  const getPriority = (estado: TerritorioEstado) => {
-    switch (estado) {
-      case 'iniciado': return 1;    // 1° Arriba (Naranja)
-      case 'disponible': return 2;  // 2° Medio (Gris)
-      case 'completado': return 3;  // 3° Abajo (Verde)
-      default: return 4;
-    }
+  // FUNCIÓN DE PRIORIDAD REFORZADA
+  const getPriority = (estado: string) => {
+    const s = estado?.toLowerCase().trim();
+    if (s === 'iniciado') return 1;    // Naranja arriba
+    if (s === 'disponible') return 2;  // Gris al medio
+    if (s === 'completado') return 3;  // Verde abajo
+    return 2; // Por defecto, si el estado es raro, lo ponemos como disponible
   };
 
-  // Ordenamos la lista con la nueva lógica
   const territoriosOrdenados = [...territorios].sort((a, b) => {
-    const priorityA = getPriority(a.estado);
-    const priorityB = getPriority(b.estado);
+    const pA = getPriority(a.estado);
+    const pB = getPriority(b.estado);
     
-    // Si la prioridad es distinta, ordena por prioridad (1, 2 o 3)
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
-    // Si tienen el mismo estado, los ordena por número de territorio
-    return a.numero - b.numero;
+    if (pA !== pB) return pA - pB;
+    return a.numero - b.numero; // Si el estado es igual, ordena por el número del territorio
   });
 
   const getStatusBadge = (estado: TerritorioEstado) => {
-    switch (estado) {
+    const s = estado?.toLowerCase().trim();
+    switch (s) {
       case 'completado':
         return <Badge className="bg-green-500 text-white"><CheckCircle2 className="w-3 h-3 mr-1" /> Completado</Badge>;
       case 'iniciado':
