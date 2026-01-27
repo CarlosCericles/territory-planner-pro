@@ -22,9 +22,13 @@ const Index = () => {
   const { territorios, isLoading: territoriosLoading, createTerritorio, updateEstado } = useTerritorios();
   const [selectedTerritorio, setSelectedTerritorio] = useState<Territorio | null>(null);
   
-  // Fetch all observaciones (no filter) for sidebar, and filtered ones for selected territory
+  // Hook de observaciones: obtenemos todas y las funciones de mutación
   const { observaciones: allObservaciones } = useObservaciones();
-  const { observaciones, createObservacion } = useObservaciones(selectedTerritorio?.id);
+  const { 
+    observaciones, 
+    createObservacion, 
+    deleteObservacion // Extraemos la función de borrar
+  } = useObservaciones(selectedTerritorio?.id);
 
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isPinMode, setIsPinMode] = useState(false);
@@ -35,7 +39,7 @@ const Index = () => {
   const [pendingPolygon, setPendingPolygon] = useState<Polygon | null>(null);
   const [pendingPinCoords, setPendingPinCoords] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Redirect to auth if not logged in
+  // Redirección si no hay sesión
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/auth');
@@ -52,15 +56,23 @@ const Index = () => {
     setShowCreateDialog(true);
   }, []);
 
-  const handlePinPlaced = useCallback((coords: { lat: number; lng: number }, territorioId: string) => {
+  const handlePinPlaced = useCallback((coords: { lat: number; lng: number }) => {
     setPendingPinCoords(coords);
     setIsPinMode(false);
     setShowObservacionDialog(true);
   }, []);
 
+  // Función para eliminar observación desde el mapa
+  const handleDeleteObservacion = useCallback(async (id: string) => {
+    try {
+      await deleteObservacion.mutateAsync(id);
+    } catch (error) {
+      console.error("Error al eliminar observación:", error);
+    }
+  }, [deleteObservacion]);
+
   const handleCreateTerritorio = async (data: { numero: number; nombre?: string; geometria_poligono: Polygon }) => {
     if (!user) return;
-
     try {
       await createTerritorio.mutateAsync({
         numero: data.numero,
@@ -77,7 +89,6 @@ const Index = () => {
 
   const handleCreateObservacion = async (comentario: string) => {
     if (!pendingPinCoords || !selectedTerritorio) return;
-
     try {
       await createObservacion.mutateAsync({
         territorio_id: selectedTerritorio.id,
@@ -93,11 +104,9 @@ const Index = () => {
 
   const handleEstadoChange = async (estado: TerritorioEstado) => {
     if (!selectedTerritorio) return;
-    
     try {
       const result = await updateEstado.mutateAsync({ id: selectedTerritorio.id, estado });
       setSelectedTerritorio(result);
-      // Disable edge edit mode when changing to pendiente or completado
       if (estado !== 'iniciado') {
         setIsEdgeEditMode(false);
       }
@@ -145,7 +154,6 @@ const Index = () => {
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      {/* Header */}
       <header className="z-10 flex h-14 items-center justify-between border-b bg-card px-4">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-primary" />
@@ -166,7 +174,6 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Map Container */}
       <div className="relative flex-1">
         <TerritoryMap
           territorios={territorios}
@@ -176,12 +183,13 @@ const Index = () => {
           onPolygonCreated={handlePolygonCreated}
           onAddObservacion={handlePinPlaced}
           onToggleEdge={handleToggleEdge}
+          onDeleteObservacion={handleDeleteObservacion} // Prop nueva conectada
+          isAdmin={isAdmin} // Pasamos permiso
           isDrawingMode={isDrawingMode}
           isAddingPin={isPinMode}
           isEdgeEditMode={isEdgeEditMode}
         />
 
-        {/* Drawing Mode Indicator */}
         {isDrawingMode && (
           <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg">
             <PenTool className="mr-2 inline h-4 w-4" />
@@ -189,7 +197,6 @@ const Index = () => {
           </div>
         )}
 
-        {/* Pin Mode Indicator */}
         {isPinMode && (
           <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg">
             <MapPin className="mr-2 inline h-4 w-4" />
@@ -197,13 +204,13 @@ const Index = () => {
           </div>
         )}
 
-        {/* Edge Edit Mode Indicator */}
         {isEdgeEditMode && (
           <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-lg">
             <PenTool className="mr-2 inline h-4 w-4" />
             Toca un lado del polígono para marcarlo como hecho
           </div>
         )}
+        
         <Button 
           className="absolute bottom-4 left-4 z-[2000] shadow-xl" 
           size="lg"
@@ -213,7 +220,6 @@ const Index = () => {
           Territorios
         </Button>
 
-        {/* Territory Sidebar */}
         <TerritorySidebar
           territorios={territorios}
           observaciones={allObservaciones}
@@ -224,7 +230,6 @@ const Index = () => {
           onClose={() => setShowSidebar(false)}
         />
 
-        {/* Territory Details Panel */}
         {selectedTerritorio && (
           <div className="absolute bottom-4 right-4 z-[1000] w-80 max-h-[70vh] overflow-auto rounded-lg border bg-card shadow-xl">
             <TerritoryDetails
@@ -244,7 +249,6 @@ const Index = () => {
         )}
       </div>
 
-      {/* Create Territorio Dialog */}
       <CreateTerritorioForm
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
@@ -253,7 +257,6 @@ const Index = () => {
         existingNumbers={existingNumbers}
       />
 
-      {/* Create Observacion Dialog */}
       <ObservacionForm
         open={showObservacionDialog}
         onOpenChange={setShowObservacionDialog}
@@ -261,7 +264,6 @@ const Index = () => {
         coords={pendingPinCoords}
       />
 
-      {/* Offline Indicator */}
       <OfflineIndicator />
     </div>
   );
