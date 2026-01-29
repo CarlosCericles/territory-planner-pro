@@ -2,8 +2,9 @@ import React from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MapPin, CheckCircle2, Circle, Clock } from 'lucide-react';
+import { MapPin, CheckCircle2, Circle, Clock, Eye } from 'lucide-react';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
+import { Button } from '@/components/ui/button';
 
 interface TerritorySidebarProps {
   territorios: Territorio[];
@@ -71,22 +72,32 @@ export function TerritorySidebar({
               return (
                 <div
                   key={t.id}
-                  className={`p-4 rounded-lg border transition-all cursor-pointer hover:border-primary/50 ${
-                    isSelected ? 'border-primary bg-primary/5 shadow-md' : 'bg-card'
-                  }`}
-                  onClick={() => {
-                    onSelectTerritorio(t);
-                    onClose();
-                  }}
+                  className={`p-4 rounded-lg border transition-all ${isSelected ? 'border-primary bg-primary/5 shadow-md' : 'bg-card'}`}
                 >
-                  <div className="flex justify-between items-start mb-2">
+                  <div 
+                    className="flex justify-between items-start mb-3 cursor-pointer" 
+                    onClick={() => onSelectTerritorio(t)}
+                  >
                     <h3 className="font-bold text-lg">Territorio {t.numero}</h3>
                     {getStatusBadge(t.estado)}
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> {obsCount} Observaciones
-                    </span>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> {obsCount} Observaciones
+                      </span>
+                    </div>
+                    <Button 
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        onSelectTerritorio(t);
+                        onClose();
+                      }}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      Ver Territorio
+                    </Button>
                   </div>
                 </div>
               );
