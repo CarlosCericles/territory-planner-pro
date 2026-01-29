@@ -19,7 +19,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface TerritoryDetailsProps {
-  territorio: Territorio | null; // Permitimos null para evitar el crash
+  territorio: Territorio | null;
   onClose: () => void;
   onChangeEstado: (estado: TerritorioEstado) => void;
   onAddPin: () => void;
@@ -33,7 +33,7 @@ interface TerritoryDetailsProps {
 
 const estadoConfig: Record<string, { label: string; className: string }> = {
   pendiente: { label: 'Pendiente', className: 'bg-territory-pending text-white' },
-  disponible: { label: 'Disponible', className: 'bg-gray-500 text-white' }, // Fallback para nuevo esquema
+  disponible: { label: 'Disponible', className: 'bg-gray-500 text-white' },
   iniciado: { label: 'Iniciado', className: 'bg-territory-started text-white' },
   completado: { label: 'Completado', className: 'bg-territory-completed text-white' },
 };
@@ -52,17 +52,15 @@ export function TerritoryDetails({
 }: TerritoryDetailsProps) {
   const { isAdmin } = useAuth();
 
-  // 1. SALVAGUARDA TOTAL: Si no hay territorio, no renderizamos nada.
   if (!territorio) return null;
 
-  // 2. NORMALIZACIÓN DE DATOS (Inglés/Español)
+  // Normalización para soportar ambos idiomas de DB
   const estadoActual = (territorio.status || territorio.estado || 'disponible') as string;
   const numero = territorio.number || territorio.numero || 'S/N';
   const nombre = territorio.name || territorio.nombre;
   const geo = territorio.boundary || territorio.geojson || territorio.geometria_poligono;
   const ladosCompletados = territorio.lados_completados || [];
   
-  // Calculamos total de lados de forma segura
   const totalLados = geo?.coordinates?.[0]?.length ? geo.coordinates[0].length - 1 : 0;
   const config = estadoConfig[estadoActual] || estadoConfig['disponible'];
 
@@ -121,12 +119,12 @@ export function TerritoryDetails({
               </Button>
             )}
             {estadoActual !== 'iniciado' && (
-              <Button variant="outline" size="sm" className="bg-orange-50" onClick={() => onChangeEstado('iniciado' as TerritorioEstado)}>
+              <Button variant="outline" size="sm" className="bg-orange-50 hover:bg-orange-100" onClick={() => onChangeEstado('iniciado' as TerritorioEstado)}>
                 <Play className="mr-2 h-4 w-4" /> Iniciado
               </Button>
             )}
             {estadoActual !== 'completado' && (
-              <Button variant="outline" size="sm" className="bg-green-50" onClick={() => onChangeEstado('completado' as TerritorioEstado)}>
+              <Button variant="outline" size="sm" className="bg-green-50 hover:bg-green-100" onClick={() => onChangeEstado('completado' as TerritorioEstado)}>
                 <CheckCircle2 className="mr-2 h-4 w-4" /> Completado
               </Button>
             )}
@@ -147,4 +145,37 @@ export function TerritoryDetails({
                 onClick={onToggleEdgeEdit}
               >
                 <Pencil className="mr-2 h-4 w-4" />
-                {isEdgeEditMode ? 'Terminar edición' :
+                {isEdgeEditMode ? 'Terminar edición' : 'Marcar lados hechos'}
+              </Button>
+            </div>
+          </>
+        )}
+
+        <Separator className="my-4" />
+
+        <Button
+          variant={isAddingPin ? 'default' : 'outline'}
+          className="w-full"
+          onClick={onAddPin}
+        >
+          <MapPin className="mr-2 h-4 w-4" />
+          {isAddingPin ? 'Toca el mapa para ubicar' : 'Agregar observación'}
+        </Button>
+      </div>
+
+      {/* Admin actions */}
+      {isAdmin && (
+        <div className="border-t p-4 bg-muted/30">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1" onClick={onEdit}>
+              <Edit2 className="mr-2 h-4 w-4" /> Editar
+            </Button>
+            <Button variant="destructive" size="sm" className="flex-1" onClick={onDelete}>
+              <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
