@@ -10,19 +10,14 @@ const Index = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedTerritorio, setSelectedTerritorio] = useState(null);
 
-  // Datos iniciales seguros
-  const territorios = [];
-  const observaciones = [];
-
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-900 relative">
-      {/* Botones de control con Z-index alto para que no los tape el mapa */}
       <div className="absolute top-4 left-4 z-[1000] flex gap-2">
         <Button 
           variant="secondary" 
           size="icon" 
           onClick={() => setIsSidebarOpen(true)}
-          className="bg-white shadow-md hover:bg-slate-100"
+          className="bg-white shadow-md"
         >
           <Menu className="h-5 w-5 text-slate-900" />
         </Button>
@@ -37,20 +32,18 @@ const Index = () => {
         </Button>
       </div>
 
-      {/* Sidebar lateral */}
       <TerritorySidebar 
-        territorios={territorios}
-        observaciones={observaciones}
+        territorios={[]}
+        observaciones={[]}
         selectedTerritorio={selectedTerritorio}
         onSelectTerritorio={(t) => setSelectedTerritorio(t)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* El Mapa simplificado - Solo con las props que definimos en el paso anterior */}
       <main className="flex-1 h-full w-full">
         <TerritoryMap 
-          territorios={territorios}
+          territorios={[]}
           selectedTerritorio={selectedTerritorio}
           onSelectTerritorio={setSelectedTerritorio}
         />
