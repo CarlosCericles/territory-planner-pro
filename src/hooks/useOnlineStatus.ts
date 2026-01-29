@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 
+/**
+ * Hook simple y robusto para monitorear la conexión.
+ * Se usa para mostrar el indicador de "Modo Offline".
+ */
 export function useOnlineStatus() {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
