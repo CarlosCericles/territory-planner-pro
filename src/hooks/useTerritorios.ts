@@ -4,12 +4,12 @@ import type { Territorio, TerritorioEstado } from '@/types/territory';
 import { useToast } from '@/hooks/use-toast';
 import { saveToLocalStorage, getFromLocalStorage } from '@/lib/offlineStorage';
 import type { Polygon } from 'geojson';
-import type { Json } from '@/integrations/supabase/types';
 
 export function useTerritorios() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // 1. Carga de territorios con persistencia local
   const query = useQuery({
     queryKey: ['territorios'],
     queryFn: async () => {
@@ -24,46 +24,68 @@ export function useTerritorios() {
         throw error;
       }
 
-      const territorios = data.map(t => ({
+      const mapped = data.map(t => ({
         ...t,
         geometria_poligono: t.geometria_poligono as unknown as Polygon,
         lados_completados: (t.lados_completados as number[]) || [],
       })) as Territorio[];
 
-      saveToLocalStorage('territorios', territorios);
-      return territorios;
+      saveToLocalStorage('territorios', mapped);
+      return mapped;
     },
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 10, // Los límites no cambian seguido, 10 min está bien
   });
 
+  // 2. Creación con normalización de JSON
   const createTerritorio = useMutation({
-    mutationFn: async (territorio: { numero: number; nombre?: string; geometria_poligono: Polygon; created_by?: string }) => {
+    mutationFn: async (territorio: { 
+      numero: number; 
+      nombre?: string; 
+      geometria_poligono: Polygon; 
+      created_by?: string 
+    }) => {
       const { data, error } = await supabase
         .from('territorios')
         .insert({
           numero: territorio.numero,
           nombre: territorio.nombre || null,
-          geometria_poligono: JSON.parse(JSON.stringify(territorio.geometria_poligono)) as Json,
+          geometria_poligono: territorio.geometria_poligono as any,
+          estado: 'disponible',
           created_by: territorio.created_by || null,
         })
         .select()
         .single();
 
       if (error) throw error;
-      return { ...data, geometria_poligono: data.geometria_poligono as unknown as Polygon } as Territorio;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['territorios'] });
-      toast({ title: 'Territorio creado' });
+      toast({ title: '¡Éxito!', description: 'Territorio guardado correctamente.' });
     },
-    onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    onError: (error: any) => {
+      toast({ 
+        title: 'Error al crear', 
+        description: error.message, 
+        variant: 'destructive' 
+      });
     },
   });
 
+  // 3. Actualización de estado (Lógica de fechas automática)
   const updateEstado = useMutation({
-    mutationFn: async ({ id, estado, lados_completados }: { id: string; estado: TerritorioEstado; lados_completados?: number[] }) => {
-      const updates: Record<string, unknown> = { estado };
+    mutationFn: async ({ 
+      id, 
+      estado, 
+      lados_completados 
+    }: { 
+      id: string; 
+      estado?: TerritorioEstado; 
+      lados_completados?: number[] 
+    }) => {
+      const updates: any = {};
+      if (estado) updates.estado = estado;
+      
       if (estado === 'completado') {
         updates.ultima_fecha_completado = new Date().toISOString();
       }
@@ -82,21 +104,14 @@ export function useTerritorios() {
         .single();
 
       if (error) throw error;
-      return { 
-        ...data, 
-        geometria_poligono: data.geometria_poligono as unknown as Polygon,
-        lados_completados: (data.lados_completados as number[]) || [],
-      } as Territorio;
+      return data;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['territorios'] });
-      toast({ title: 'Estado actualizado', description: `Territorio #${data.numero}` });
-    },
-    onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
     },
   });
 
+  // 4. Eliminación
   const deleteTerritorio = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('territorios').delete().eq('id', id);
@@ -106,25 +121,11 @@ export function useTerritorios() {
       queryClient.invalidateQueries({ queryKey: ['territorios'] });
       toast({ title: 'Territorio eliminado' });
     },
-    onError: (error) => {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  const sortedTerritorios = query.data?.slice().sort((a, b) => {
-    if (a.estado === 'pendiente' && b.estado !== 'pendiente') return -1;
-    if (b.estado === 'pendiente' && a.estado !== 'pendiente') return 1;
-    if (a.ultima_fecha_completado && b.ultima_fecha_completado) {
-      return new Date(a.ultima_fecha_completado).getTime() - new Date(b.ultima_fecha_completado).getTime();
-    }
-    return a.numero - b.numero;
   });
 
   return {
     territorios: query.data ?? [],
-    sortedTerritorios: sortedTerritorios ?? [],
     isLoading: query.isLoading,
-    error: query.error,
     createTerritorio,
     updateEstado,
     deleteTerritorio,
