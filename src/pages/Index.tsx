@@ -92,7 +92,8 @@ const Index = () => {
         )}
       </div>
 
-      <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+      {/* Right Group moved down to avoid overlap */}
+      <div className="absolute top-24 right-4 z-[1000] flex flex-col gap-2">
         <Button variant="destructive" size="icon" onClick={signOut} className="shadow-xl">
           <LogOut className="h-5 w-5" />
         </Button>
@@ -125,7 +126,7 @@ const Index = () => {
       <main className="flex-1 h-full w-full relative z-0">
         <Suspense fallback={<div className="h-full w-full bg-slate-800 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-white"/></div>}>
           <TerritoryMap 
-            territorios={territorios} // <- CORREGIDO
+            territorios={territorios}
             selectedTerritorio={selectedTerritorio}
             onSelectTerritorio={setSelectedTerritorio}
             isAdmin={isAdmin}
