@@ -121,7 +121,7 @@ const TerritoryMap = ({
           const center = bounds.getCenter();
           
           const numberIcon = L.divIcon({
-            html: `<span class="text-black font-bold text-lg" style="text-shadow: 0 0 2px white, 0 0 2px white;">${t.numero}</span>`,
+            html: `<span class="text-black font-bold text-lg">${t.numero}</span>`,
             className: 'leaflet-div-icon',
             iconSize: [24, 24],
             iconAnchor: [12, 12],
