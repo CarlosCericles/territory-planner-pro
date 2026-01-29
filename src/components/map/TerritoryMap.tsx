@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Polygon, useMap, ZoomControl, LayersControl } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, useMap, ZoomControl, LayersControl, Marker } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Territorio } from '@/types/territory';
@@ -101,7 +101,7 @@ const TerritoryMap = ({
           </LayersControl.BaseLayer>
           <LayersControl.BaseLayer name="Vista Satelital">
             <TileLayer
-              attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+              attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             />
           </LayersControl.BaseLayer>
@@ -113,25 +113,42 @@ const TerritoryMap = ({
 
         {territorios?.map((t: Territorio) => {
           if (!t.geometria_poligono?.coordinates?.[0]) return null;
+          
           const positions = t.geometria_poligono.coordinates[0].map((c: any) => [c[1], c[0]]);
           const isSelected = selectedTerritorio?.id === t.id;
           
+          const bounds = L.latLngBounds(positions as [number, number][]);
+          const center = bounds.getCenter();
+          
+          const numberIcon = L.divIcon({
+            html: `<span class="text-white font-bold text-sm" style="text-shadow: 0 0 3px black, 0 0 3px black;">${t.numero}</span>`,
+            className: 'leaflet-div-icon',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+          });
+
           return (
-            <Polygon
-              key={t.id}
-              positions={positions as [number, number][]}
-              pathOptions={{
-                color: isSelected ? '#3b82f6' : '#64748b',
-                weight: isSelected ? 4 : 2,
-                fillOpacity: isSelected ? 0.6 : 0.4,
-              }}
-              eventHandlers={{
-                click: (e) => {
-                  L.DomEvent.stopPropagation(e);
-                  onSelectTerritorio(t);
-                },
-              }}
-            />
+            <React.Fragment key={t.id}>
+              <Polygon
+                positions={positions as [number, number][]}
+                pathOptions={{
+                  color: isSelected ? '#3b82f6' : '#64748b',
+                  weight: isSelected ? 4 : 2,
+                  fillOpacity: isSelected ? 0.6 : 0.4,
+                }}
+                eventHandlers={{
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    onSelectTerritorio(t);
+                  },
+                }}
+              />
+              <Marker
+                position={center}
+                icon={numberIcon}
+                interactive={false} // Para que no interfiera con el clic en el polígono
+              />
+            </React.Fragment>
           );
         })}
       </MapContainer>
