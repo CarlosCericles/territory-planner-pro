@@ -39,7 +39,6 @@ export function TerritoryMap({
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    // 1. Definir capas base
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap'
@@ -50,14 +49,12 @@ export function TerritoryMap({
       attribution: 'Tiles &copy; Esri'
     });
 
-    // 2. Crear mapa
     const map = L.map(mapContainerRef.current, {
       center: [BERNARDO_DE_IRIGOYEN.lat, BERNARDO_DE_IRIGOYEN.lng],
       zoom: 15,
-      layers: [osm] // Empezar con calles
+      layers: [osm]
     });
 
-    // 3. Añadir Control de Capas (Botón arriba a la derecha)
     const baseLayers = {
       "Mapa de Calles": osm,
       "Vista Satelital": satelite
@@ -75,7 +72,7 @@ export function TerritoryMap({
     };
   }, []);
 
-  // --- CAPTURA DE CLIC PARA PIN (CON PROTECCIÓN) ---
+  // --- CAPTURA DE CLIC PARA PIN ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -118,19 +115,24 @@ export function TerritoryMap({
     }
   }, [isDrawingMode, mapReady, onPolygonCreated]);
 
-  // --- RENDERIZADO DE CAPAS (TERRITORIOS Y BORDES) ---
+  // --- RENDERIZADO DE CAPAS ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
     layersRef.current.clearLayers();
 
     territorios.forEach((t: any) => {
-      const geo = t.geometria_poligono || t.poligono || t.geometria;
+      // CORRECCIÓN: Buscamos tanto nombres en inglés como en español
+      const geo = t.boundary || t.geojson || t.geometria_poligono || t.poligono || t.geometria;
+      const estado = t.status || t.estado;
+      const numero = t.number || t.numero;
+      
       if (!geo?.coordinates?.[0]) return;
+      
       const coords = geo.coordinates[0].map((c: any) => [c[1], c[0]] as L.LatLngTuple);
       const isSelected = t.id === selectedTerritorio?.id;
-      const isCompletado = t.estado === 'completado';
-      const color = isCompletado ? '#22c55e' : (t.estado === 'iniciado' ? '#f97316' : '#9ca3af');
+      const isCompletado = estado === 'completado';
+      const color = isCompletado ? '#22c55e' : (estado === 'iniciado' ? '#f97316' : '#9ca3af');
 
       const poly = L.polygon(coords, {
         color: isSelected ? '#2563eb' : (isCompletado ? '#16a34a' : 'transparent'),
@@ -140,7 +142,7 @@ export function TerritoryMap({
         interactive: !isAddingPin && !isDrawingMode 
       }).addTo(layersRef.current!);
 
-      poly.bindTooltip(`<div style="font-weight:bold">${t.numero}</div>`, {
+      poly.bindTooltip(`<div style="font-weight:bold">${numero}</div>`, {
         permanent: true, direction: 'center', className: 'number-tooltip'
       }).openTooltip();
 
@@ -151,8 +153,10 @@ export function TerritoryMap({
         });
       }
 
-      if (isSelected || (t.estado === 'iniciado' && !isCompletado)) {
-        const hechos = t.lados_completados || [];
+      // Lados completados: ahora manejamos si es un número o un array
+      if (isSelected || (estado === 'iniciado' && !isCompletado)) {
+        const hechos = Array.isArray(t.lados_completados) ? t.lados_completados : [];
+        
         for (let i = 0; i < coords.length - 1; i++) {
           const esHecho = hechos.includes(i);
           if (isEdgeEditMode || (esHecho && !isCompletado)) {
@@ -175,11 +179,11 @@ export function TerritoryMap({
     });
 
     observaciones.forEach((obs: any) => {
-      const c = obs.coordenadas;
+      const c = obs.coordenadas || obs.coordinates;
       if (c?.lat && c?.lng) {
         const marker = L.marker([c.lat, c.lng]).addTo(layersRef.current!);
         const cont = document.createElement('div');
-        cont.innerHTML = `<b>Obs:</b><br>${obs.comentario || ''}`;
+        cont.innerHTML = `<b>Obs:</b><br>${obs.comentario || obs.comment || ''}`;
         if (isAdmin) {
           const btn = document.createElement('button');
           btn.innerText = 'Eliminar';
@@ -201,8 +205,4 @@ export function TerritoryMap({
       <div 
         ref={mapContainerRef} 
         className="h-full w-full" 
-        style={{ minHeight: '600px', cursor: (isDrawingMode || isAddingPin) ? 'crosshair' : 'grab', zIndex: 0 }} 
-      />
-    </>
-  );
-}
+        style={{ minHeight: '600
