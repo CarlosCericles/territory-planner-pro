@@ -8,7 +8,7 @@ import { Menu, LogOut, Users, Plus, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const Index = () => {
-  const { user, isAdmin, signOut } = useAuth();
+  const { isAdmin, signOut } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedTerritorio, setSelectedTerritorio] = useState(null);
   const [territorios, setTerritorios] = useState([]);
@@ -25,17 +25,18 @@ const Index = () => {
       setTerritorios(terrs || []);
       setObservaciones(obss || []);
     } catch (error) {
-      toast.error("Error al sincronizar datos");
+      toast.error("Error de conexión con la base de datos");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleCreatePolygon = async (geojson: any) => {
     try {
-      // Calculamos el siguiente número disponible
       const nextNumber = territorios.length > 0 
         ? Math.max(...territorios.map((t: any) => t.numero || 0)) + 1 
         : 1;
@@ -48,55 +49,62 @@ const Index = () => {
 
       if (error) throw error;
       
-      toast.success(`Territorio ${nextNumber} creado con éxito`);
+      toast.success(`Territorio ${nextNumber} guardado`);
       fetchData();
       setIsDrawingMode(false);
     } catch (error) {
-      toast.error("Error al guardar el territorio");
+      toast.error("Error al guardar polígono");
     }
   };
 
-  if (loading) return <div className="h-screen w-full flex items-center justify-center bg-slate-900 text-white"><Loader2 className="animate-spin" /></div>;
+  if (loading) return (
+    <div className="h-screen w-full flex items-center justify-center bg-slate-900 text-white">
+      <Loader2 className="animate-spin mr-2" /> Cargando...
+    </div>
+  );
 
   return (
     <div className="flex h-screen w-full bg-slate-900 overflow-hidden relative">
       
-      {/* BOTONES FLOTANTES SUPERIORES (Estilo anterior) */}
+      {/* Grupo Izquierdo: Menú y Dibujo */}
       <div className="absolute top-4 left-4 z-[1000] flex gap-2">
-        <Button variant="secondary" size="icon" onClick={() => setIsSidebarOpen(true)} className="bg-white shadow-lg border-none hover:bg-slate-100">
+        <Button 
+          variant="secondary" 
+          size="icon" 
+          onClick={() => setIsSidebarOpen(true)} 
+          className="bg-white shadow-xl hover:bg-slate-100 border-none"
+        >
           <Menu className="h-5 w-5 text-slate-900" />
         </Button>
         
         {isAdmin && (
           <Button 
-            variant={isDrawingMode ? "default" : "secondary"}
             onClick={() => { setIsDrawingMode(!isDrawingMode); setIsAddingPin(false); }}
-            className={`${isDrawingMode ? "bg-blue-600" : "bg-white"} shadow-lg border-none text-slate-900`}
+            className={`${isDrawingMode ? "bg-blue-600 text-white" : "bg-white text-slate-900"} shadow-xl border-none hover:opacity-90`}
           >
-            <Plus className={`h-5 w-5 ${isDrawingMode ? "text-white" : "text-slate-900"} mr-2`} />
-            <span className={isDrawingMode ? "text-white" : "text-slate-900"}>Nuevo Polígono</span>
+            <Plus className="h-5 w-5 mr-2" />
+            <span>Nuevo Polígono</span>
           </Button>
         )}
       </div>
 
-      {/* BOTONES LADO DERECHO (Añadir Nota y Personas) */}
+      {/* Grupo Derecho: Salir, Personas y Notas */}
       <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
-        <Button variant="destructive" size="icon" onClick={() => signOut()} className="shadow-lg">
+        <Button variant="destructive" size="icon" onClick={() => signOut()} className="shadow-xl">
           <LogOut className="h-5 w-5" />
         </Button>
         
         {isAdmin && (
           <>
-            <Button variant="secondary" size="icon" className="bg-white shadow-lg text-slate-900">
+            <Button variant="secondary" size="icon" className="bg-white shadow-xl text-slate-900 hover:bg-slate-100 border-none">
               <Users className="h-5 w-5" />
             </Button>
             <Button 
-              variant={isAddingPin ? "default" : "secondary"}
-              size="icon"
               onClick={() => { setIsAddingPin(!isAddingPin); setIsDrawingMode(false); }}
-              className={`${isAddingPin ? "bg-orange-600" : "bg-white"} shadow-lg text-slate-900`}
+              size="icon"
+              className={`${isAddingPin ? "bg-orange-600 text-white" : "bg-white text-slate-900"} shadow-xl border-none hover:bg-slate-100`}
             >
-              <MapPin className={`h-5 w-5 ${isAddingPin ? "text-white" : ""}`} />
+              <MapPin className="h-5 w-5" />
             </Button>
           </>
         )}
