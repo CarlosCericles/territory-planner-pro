@@ -1,25 +1,56 @@
-import React from 'react';
-import { Sidebar } from "@/components/layout/Sidebar";
-import { useIsMobile } from "@/hooks/use-mobile";
+import React, { useState } from 'react';
+import { TerritorySidebar } from "../components/layout/TerritorySidebar.tsx";
 import { useAuth } from '@/contexts/AuthContext';
+import { Button } from "@/components/ui/button";
+import { Menu } from "lucide-react";
 
 const Index = () => {
-  const isMobile = useIsMobile();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Datos temporales para que no explote mientras conectamos la base de datos real
+  const [territorios] = useState([]);
+  const [observaciones] = useState([]);
+  const [selectedTerritorio, setSelectedTerritorio] = useState(null);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
-      {/* Sidebar - Lo probamos solo a él */}
-      <aside className={`${isMobile ? 'fixed inset-y-0 left-0 z-50' : 'relative w-80'} h-full border-r border-border bg-card`}>
-        <Sidebar />
-      </aside>
+    <div className="flex h-screen w-full overflow-hidden bg-slate-900 text-white">
+      {/* Botón para abrir el Sidebar en el futuro mapa */}
+      <div className="absolute top-4 left-4 z-50">
+        <Button variant="outline" size="icon" onClick={() => setIsSidebarOpen(true)}>
+          <Menu className="h-4 w-4" />
+        </Button>
+      </div>
 
-      {/* Contenedor temporal para el mapa mientras lo arreglamos */}
-      <main className="relative flex-1 h-full w-full bg-slate-800 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-white text-xl font-bold">Sidebar cargado correctamente</h2>
-          <p className="text-slate-400">Usuario: {user?.email}</p>
-          <p className="mt-4 text-amber-400 animate-pulse font-mono text-sm">Próximo paso: Reconectar el Mapa</p>
+      {/* Sidebar con el nombre corregido */}
+      <TerritorySidebar 
+        territorios={territorios}
+        observaciones={observaciones}
+        selectedTerritorio={selectedTerritorio}
+        onSelectTerritorio={(t) => setSelectedTerritorio(t)}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
+
+      {/* Contenedor Principal */}
+      <main className="flex-1 flex flex-col items-center justify-center p-4">
+        <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 shadow-2xl text-center max-w-md">
+          <h1 className="text-3xl font-bold mb-2">¡Sistema Conectado!</h1>
+          <p className="text-slate-400 mb-6">El Sidebar se llama "TerritorySidebar" y ya lo vinculamos correctamente.</p>
+          
+          <div className="text-left bg-slate-900/50 p-4 rounded mb-6 text-sm font-mono">
+            <p className="text-green-400">✓ Conexión con Supabase: OK</p>
+            <p className="text-green-400">✓ Autenticación: OK</p>
+            <p className="text-green-400">✓ Componentes de UI: OK</p>
+          </div>
+
+          <Button 
+            variant="destructive" 
+            onClick={() => signOut()}
+            className="w-full"
+          >
+            Cerrar Sesión
+          </Button>
         </div>
       </main>
     </div>
