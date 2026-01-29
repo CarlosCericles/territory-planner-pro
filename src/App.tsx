@@ -1,53 +1,54 @@
 
-import { useState, useEffect } from 'react';
-import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { useUser, useSupabaseClient, useSession } from '@supabase/auth-helpers-react';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { useTerritorios } from '@/hooks/useTerritorios';
+import type { Territorio } from '@/types/territory';
 
 import AuthPage from '@/components/auth/AuthPage';
 import Header from '@/components/layout/Header';
 import Spinner from '@/components/ui/Spinner';
 import CreateTerritorioDialog from '@/components/territory/CreateTerritorioDialog';
-import TerritoryMap from '@/components/map/TerritoryMap';
 
-// Dynamically import the map component to prevent SSR issues with Leaflet
-import dynamic from 'next/dynamic';
-const DynamicTerritoryMap = dynamic(() => import('@/components/map/TerritoryMap'), {
-  ssr: false,
-  loading: () => <div className="w-full h-full bg-slate-900 flex items-center justify-center"><Spinner /></div>
-});
+// Use React.lazy for dynamic import in a Vite/React project
+const TerritoryMap = lazy(() => import('@/components/map/TerritoryMap'));
 
 function App() {
-  const supabaseClient = useSupabaseClient();
+  const session = useSession();
   const user = useUser();
+  const supabaseClient = useSupabaseClient();
   const { toast } = useToast();
   
   const { 
     territorios, 
-    isLoading, 
+    isLoading,
+    isError,
     createTerritorio, 
     updateEstado 
   } = useTerritorios();
 
   const [isAdmin, setIsAdmin] = useState(false);
-  const [selectedTerritorio, setSelectedTerritorio] = useState(null);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
-  const [newPolygon, setNewPolygon] = useState(null);
+  const [newPolygon, setNewPolygon] = useState<object | null>(null);
 
   // Check for admin role once user is loaded
   useEffect(() => {
     if (user) {
       const checkAdmin = async () => {
-        const { data } = await supabaseClient.rpc('is_admin');
-        setIsAdmin(data);
+        try {
+          const { data, error } = await supabaseClient.rpc('is_admin');
+          if (error) throw error;
+          setIsAdmin(data);
+        } catch (error) {
+          console.error("Error checking admin status:", error);
+        }
       };
       checkAdmin();
     }
   }, [user, supabaseClient]);
 
-  // Handler for creating a new territory
-  const handleCreateTerritory = async (details) => {
+  const handleCreateTerritory = async (details: { numero: number; nombre: string }) => {
     if (!newPolygon) {
       toast({ title: 'Error', description: 'No se ha dibujado un polígono.', variant: 'destructive' });
       return;
@@ -56,36 +57,28 @@ function App() {
       ...details,
       geometria_poligono: newPolygon,
     });
-    // Reset state after creation
     setNewPolygon(null);
     setIsDrawingMode(false);
   };
 
-  // Handler for updating territory status from the map popup
-  const handleUpdateStatus = async (territoryId, newStatus) => {
-    await updateEstado.mutateAsync({ id: territoryId, estado: newStatus });
+  const handleUpdateStatus = (territoryId: number, newStatus: Territorio['estado']) => {
+    updateEstado.mutate({ id: territoryId, estado: newStatus });
     toast({ title: 'Actualizado', description: `Territorio puesto como ${newStatus}.` });
-    setSelectedTerritorio(null); // Close popup on update
   };
   
-  // When a polygon is drawn on the map, store it and keep drawing mode active
-  const handlePolygonCreated = (geojson) => {
+  const handlePolygonCreated = (geojson: object) => {
     setNewPolygon(geojson);
-    // Do not exit drawing mode, let the user decide.
   };
 
-  // Toggle drawing mode
   const toggleDrawingMode = () => {
-    // If turning off drawing mode, clear any unsaved polygon
-    if (isDrawingMode) {
+    if (isDrawingMode && newPolygon) {
       setNewPolygon(null);
     }
-    setIsDrawingMode(!isDrawingMode);
-    setSelectedTerritorio(null); // Deselect territory when entering/exiting draw mode
+    setIsDrawingMode(prev => !prev);
   };
-  
-  // Render Auth page if not logged in
-  if (!user) {
+
+  // Show auth page if no active session
+  if (!session) {
     return <AuthPage />;
   }
   
@@ -93,33 +86,29 @@ function App() {
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-white">
       <Header
-        user={user}
-        supabaseClient={supabaseClient}
         isAdmin={isAdmin}
         isDrawingMode={isDrawingMode}
         onToggleDrawing={toggleDrawingMode}
       />
 
       <main className="flex-grow relative">
-        {isLoading ? (
-          <div className="w-full h-full flex items-center justify-center"><Spinner /></div>
-        ) : (
-          <DynamicTerritoryMap
-            territorios={territorios || []}
-            selectedTerritorio={selectedTerritorio}
-            onSelectTerritorio={setSelectedTerritorio}
-            onUpdateStatus={handleUpdateStatus}
-            isDrawingMode={isDrawingMode}
-            onPolygonCreated={handlePolygonCreated}
-          />
-        )}
+        <Suspense fallback={<div className="w-full h-full flex items-center justify-center bg-slate-900"><Spinner /></div>}>
+          {isError ? (
+            <div className="w-full h-full flex items-center justify-center text-red-500">Error al cargar los territorios.</div>
+          ) : (
+            <TerritoryMap
+              territorios={territorios || []}
+              onUpdateStatus={handleUpdateStatus}
+              isDrawingMode={isDrawingMode}
+              onPolygonCreated={handlePolygonCreated}
+            />
+          )}
+        </Suspense>
       </main>
 
-      {/* Dialog for creating a new territory, appears when a polygon is drawn */}
       <CreateTerritorioDialog
         isOpen={isDrawingMode && newPolygon !== null}
         onClose={() => {
-          // If the dialog is closed, clear the polygon and exit drawing mode
           setNewPolygon(null);
           setIsDrawingMode(false);
         }}
