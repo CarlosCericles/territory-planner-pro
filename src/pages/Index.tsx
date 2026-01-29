@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTerritorios } from '@/hooks/useTerritorios';
@@ -21,17 +21,18 @@ const Index = () => {
   const navigate = useNavigate();
   const { user, isLoading: authLoading, isAdmin } = useAuth();
   
-  // Extraemos las mutaciones directamente para usarlas con .mutate()
   const { 
     territorios, 
     createTerritorio, 
     updateEstado, 
-    refreshTerritorios 
+    deleteTerritorio 
   } = useTerritorios();
   
   const [selectedTerritorio, setSelectedTerritorio] = useState<Territorio | null>(null);
-  const { observaciones, createObservacion, deleteObservacion } = useObservaciones(selectedTerritorio?.id);
+  
+  // Hook de observaciones: obtenemos todas para el mapa y las específicas para el detalle
   const { observaciones: allObservaciones } = useObservaciones();
+  const { createObservacion, deleteObservacion } = useObservaciones(selectedTerritorio?.id);
 
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isPinMode, setIsPinMode] = useState(false);
@@ -40,6 +41,7 @@ const Index = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showObservacionDialog, setShowObservacionDialog] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  
   const [pendingPolygon, setPendingPolygon] = useState<Polygon | null>(null);
   const [pendingPinCoords, setPendingPinCoords] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -51,24 +53,36 @@ const Index = () => {
 
   const handleCreateSubmit = async (data: any) => {
     try {
-      // Sincronizado con useTerritorios.ts: espera 'numero' y 'geometria_poligono'
       await createTerritorio.mutateAsync({
-        numero: Number(data.number || data.numero),
-        nombre: data.name || data.nombre,
+        numero: Number(data.numero || data.number),
+        nombre: data.nombre || data.name || '',
         geometria_poligono: pendingPolygon!,
+        estado: 'disponible',
         created_by: user?.id
       });
       
       setShowCreateDialog(false);
       setPendingPolygon(null);
+      toast.success("Territorio creado con éxito");
     } catch (error: any) {
       console.error("Error al crear:", error);
-      // El error ya lo maneja el toast del hook, pero por si acaso:
-      if (!error.message.includes("toast")) toast.error("Error al guardar");
+      toast.error("No se pudo guardar el territorio");
     }
   };
 
-  if (authLoading && !user) {
+  const handleUpdateEstado = (nuevoEstado: TerritorioEstado) => {
+    if (!selectedTerritorio) return;
+    
+    updateEstado.mutate({ 
+      id: selectedTerritorio.id, 
+      estado: nuevoEstado 
+    });
+    
+    // Actualización local para feedback inmediato
+    setSelectedTerritorio({ ...selectedTerritorio, estado: nuevoEstado });
+  };
+
+  if (authLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -80,12 +94,14 @@ const Index = () => {
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      {/* Header: Z-Index 30 para que el panel lateral (Z-60) lo tape */}
-      <header className="z-[30] flex h-14 items-center justify-between border-b bg-card px-4 sticky top-0">
+      {/* Header con Z-index controlado */}
+      <header className="z-[50] flex h-14 items-center justify-between border-b bg-card px-4 shadow-sm">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-primary" />
-          <h1 className="text-lg font-semibold">Territorios</h1>
+          <h1 className="text-lg font-semibold hidden md:block">Gestión de Territorios</h1>
+          <h1 className="text-lg font-semibold md:hidden">Territorios</h1>
         </div>
+        
         <div className="flex items-center gap-2">
           {isAdmin && (
             <>
@@ -96,12 +112,15 @@ const Index = () => {
                 className="flex items-center gap-2 text-blue-600 border-blue-200"
               >
                 <Users className="h-4 w-4" />
-                <span className="hidden md:inline">Equipo</span>
+                <span className="hidden sm:inline">Equipo</span>
               </Button>
               <Button
-                variant={isDrawingMode ? 'secondary' : 'outline'}
+                variant={isDrawingMode ? 'secondary' : 'default'}
                 size="sm"
-                onClick={() => setIsDrawingMode(!isDrawingMode)}
+                onClick={() => {
+                  setIsDrawingMode(!isDrawingMode);
+                  if (selectedTerritorio) setSelectedTerritorio(null);
+                }}
               >
                 <Plus className="mr-1 h-4 w-4" />
                 {isDrawingMode ? 'Cancelar' : 'Nuevo'}
@@ -112,13 +131,13 @@ const Index = () => {
         </div>
       </header>
 
-      <div className="relative flex-1 overflow-hidden">
+      <main className="relative flex-1 overflow-hidden">
         <TerritoryMap
           territorios={territorios || []}
           observaciones={allObservaciones || []}
           selectedTerritorio={selectedTerritorio}
           onSelectTerritorio={setSelectedTerritorio}
-          onPolygonCreated={(geojson: Polygon) => {
+          onPolygonCreated={(geojson) => {
             setPendingPolygon(geojson);
             setIsDrawingMode(false);
             setShowCreateDialog(true);
@@ -129,7 +148,6 @@ const Index = () => {
             setShowObservacionDialog(true);
           }}
           onToggleEdge={(id, index) => {
-            // Lógica para marcar lados individuales
             if (selectedTerritorio) {
               const currentLados = selectedTerritorio.lados_completados || [];
               const newLados = currentLados.includes(index)
@@ -138,9 +156,9 @@ const Index = () => {
               
               updateEstado.mutate({ 
                 id: selectedTerritorio.id, 
-                estado: selectedTerritorio.estado as TerritorioEstado,
                 lados_completados: newLados 
               });
+              setSelectedTerritorio({...selectedTerritorio, lados_completados: newLados});
             }
           }}
           onDeleteObservacion={deleteObservacion}
@@ -150,34 +168,38 @@ const Index = () => {
           isEdgeEditMode={isEdgeEditMode}
         />
 
-        <Button 
-          className="absolute bottom-6 left-6 z-[40] shadow-2xl rounded-full px-6" 
-          onClick={() => setShowSidebar(true)}
-        >
-          <List className="mr-2 h-5 w-5" />
-          Lista
-        </Button>
+        {/* Botón flotante para Lista movido para no obstruir */}
+        {!selectedTerritorio && !isDrawingMode && (
+          <Button 
+            className="absolute bottom-6 left-6 z-[40] shadow-xl rounded-full px-6 py-6" 
+            onClick={() => setShowSidebar(true)}
+          >
+            <List className="mr-2 h-5 w-5" />
+            Ver Lista
+          </Button>
+        )}
 
-        {/* PANEL DE DETALLES: Z-60 garantiza que tape el header y el mapa */}
+        {/* Panel de Detalles */}
         {selectedTerritorio && (
-          <div className="fixed inset-y-0 right-0 z-[60] w-full sm:w-80 shadow-2xl bg-white border-l animate-in slide-in-from-right duration-300">
+          <div className="fixed inset-y-0 right-0 z-[100] w-full sm:w-80 shadow-2xl">
             <TerritoryDetails
               territorio={selectedTerritorio}
-              onClose={() => setSelectedTerritorio(null)}
-              onChangeEstado={(estado) => {
-                // CORRECCIÓN: Pasar objeto al mutador
-                updateEstado.mutate({ 
-                  id: selectedTerritorio.id, 
-                  estado: estado 
-                });
-                // Actualización local para UI instantánea
-                setSelectedTerritorio({...selectedTerritorio, estado});
+              onClose={() => {
+                setSelectedTerritorio(null);
+                setIsEdgeEditMode(false);
               }}
+              onChangeEstado={handleUpdateEstado}
               onAddPin={() => setIsPinMode(true)}
               onToggleEdgeEdit={() => setIsEdgeEditMode(!isEdgeEditMode)}
+              onDelete={() => {
+                if(confirm("¿Borrar este territorio?")) {
+                  deleteTerritorio.mutate(selectedTerritorio.id);
+                  setSelectedTerritorio(null);
+                }
+              }}
               isAddingPin={isPinMode}
               isEdgeEditMode={isEdgeEditMode}
-              observacionesCount={observaciones?.length || 0}
+              observacionesCount={allObservaciones?.filter(o => o.territorio_id === selectedTerritorio.id).length || 0}
             />
           </div>
         )}
@@ -193,7 +215,7 @@ const Index = () => {
           isOpen={showSidebar}
           onClose={() => setShowSidebar(false)}
         />
-      </div>
+      </main>
 
       <CreateTerritorioForm
         open={showCreateDialog}
@@ -207,14 +229,15 @@ const Index = () => {
         open={showObservacionDialog}
         onOpenChange={setShowObservacionDialog}
         onSubmit={(data) => {
-            if (!selectedTerritorio || !pendingPinCoords) return;
-            createObservacion({
-              territorio_id: selectedTerritorio.id,
-              coordenadas: pendingPinCoords,
-              ...data
-            });
-            setShowObservacionDialog(false);
-            setPendingPinCoords(null);
+          if (!selectedTerritorio || !pendingPinCoords) return;
+          createObservacion({
+            territorio_id: selectedTerritorio.id,
+            coordenadas: pendingPinCoords,
+            comentario: data.comentario || data
+          });
+          setShowObservacionDialog(false);
+          setPendingPinCoords(null);
+          toast.success("Nota agregada");
         }}
       />
 
