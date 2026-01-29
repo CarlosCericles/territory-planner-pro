@@ -19,13 +19,18 @@ const Index = () => {
   const [isAddingPin, setIsAddingPin] = useState(false);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
-      const { data: terrs } = await supabase.from('territorios').select('*').order('numero', { ascending: true });
-      const { data: obss } = await supabase.from('observaciones').select('*');
+      const { data: terrs, error: terrsError } = await supabase.from('territorios').select('*').order('numero', { ascending: true });
+      if (terrsError) throw terrsError;
+      
+      const { data: obss, error: obssError } = await supabase.from('observaciones').select('*');
+      if (obssError) throw obssError;
+
       setTerritorios(terrs || []);
       setObservaciones(obss || []);
-    } catch (error) {
-      toast.error("Error de conexión con la base de datos");
+    } catch (error: any) {
+      toast.error("Error de conexión con la base de datos: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -50,7 +55,7 @@ const Index = () => {
       if (error) throw error;
       
       toast.success(`Territorio ${nextNumber} guardado`);
-      fetchData();
+      fetchData(); // Refrescar datos
       setIsDrawingMode(false);
     } catch (error) {
       toast.error("Error al guardar polígono");
@@ -66,7 +71,6 @@ const Index = () => {
   return (
     <div className="flex h-screen w-full bg-slate-900 overflow-hidden relative">
       
-      {/* Left Group: Menu and Drawing */}
       <div className="absolute top-4 left-4 z-[1000] flex gap-2">
         <Button 
           variant="secondary" 
@@ -88,9 +92,8 @@ const Index = () => {
         )}
       </div>
 
-      {/* Right Group: Logout, People, and Notes */}
       <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
-        <Button variant="destructive" size="icon" onClick={() => signOut()} className="shadow-xl">
+        <Button variant="destructive" size="icon" onClick={signOut} className="shadow-xl">
           <LogOut className="h-5 w-5" />
         </Button>
         
@@ -122,7 +125,7 @@ const Index = () => {
       <main className="flex-1 h-full w-full relative z-0">
         <Suspense fallback={<div className="h-full w-full bg-slate-800 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-white"/></div>}>
           <TerritoryMap 
-            territorios={territorios}
+            territorios={territorios} // <- CORREGIDO
             selectedTerritorio={selectedTerritorio}
             onSelectTerritorio={setSelectedTerritorio}
             isAdmin={isAdmin}
