@@ -10,7 +10,7 @@ export function useObservaciones(territorioId?: string) {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // 1. Obtener las observaciones
+  // 1. Obtener observaciones (con caché inteligente)
   const query = useQuery({
     queryKey: ['observaciones', territorioId],
     queryFn: async () => {
@@ -24,11 +24,10 @@ export function useObservaciones(territorioId?: string) {
       }
 
       const { data, error } = await queryBuilder;
-
       if (error) throw error;
       return data as Observacion[];
     },
-    enabled: !!territorioId || territorioId === undefined,
+    staleTime: 1000 * 60 * 2, // 2 minutos de datos frescos
   });
 
   // 2. Crear nueva observación
@@ -38,122 +37,84 @@ export function useObservaciones(territorioId?: string) {
       coordenadas: { lat: number; lng: number };
       comentario: string;
     }) => {
-      if (!user) throw new Error('Usuario no autenticado');
+      if (!user) throw new Error('Debes iniciar sesión');
 
-      const newObservacion = {
-        ...observacion,
+      const payload = {
+        territorio_id: observacion.territorio_id,
+        coordenadas: observacion.coordenadas,
+        comentario: observacion.comentario,
         usuario_id: user.id,
       };
 
       const { data, error } = await supabase
         .from('observaciones')
-        .insert(newObservacion)
+        .insert(payload)
         .select()
         .single();
 
       if (error) {
-        // Lógica para modo Offline
         if (!navigator.onLine) {
           addPendingChange({
             type: 'create',
             table: 'observaciones',
-            data: newObservacion,
+            data: payload,
           });
-          toast({
-            title: 'Guardado offline',
-            description: 'La observación se sincronizará cuando tengas conexión',
-          });
-          return newObservacion as unknown as Observacion;
+          return { ...payload, id: 'temp-' + Date.now(), created_at: new Date().toISOString() } as Observacion;
         }
         throw error;
       }
-
       return data as Observacion;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['observaciones'] });
+      const isTemp = data.id.toString().startsWith('temp-');
       toast({
-        title: 'Observación guardada',
-        description: 'El pin se ha agregado correctamente',
+        title: isTemp ? 'Guardado en el dispositivo' : 'Nota guardada',
+        description: isTemp ? 'Se sincronizará al recuperar conexión' : 'El pin aparece ahora en el mapa',
       });
     },
     onError: (error: any) => {
       toast({
-        title: 'Error al crear',
-        description: error.message,
+        title: 'Error',
+        description: error.message || 'No se pudo guardar la nota',
         variant: 'destructive',
       });
     },
   });
 
-  // 3. Editar observación existente
-  const updateObservacion = useMutation({
-    mutationFn: async ({ 
-      id, 
-      comentario 
-    }: { 
-      id: string; 
-      comentario: string;
-    }) => {
-      const { data, error } = await supabase
-        .from('observaciones')
-        .update({ comentario })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as Observacion;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['observaciones'] });
-      toast({
-        title: 'Observación actualizada',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error al actualizar',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // 4. Eliminar observación (Esta es la que conectaremos al mapa)
+  // 3. Eliminar observación (con actualización optimista)
   const deleteObservacion = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('observaciones')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('observaciones').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      // Importante: Invalida tanto la lista general como la del territorio
-      queryClient.invalidateQueries({ queryKey: ['observaciones'] });
-      toast({
-        title: 'Observación eliminada',
-        description: 'El marcador ha sido removido del mapa',
-      });
+    onMutate: async (id) => {
+      // Cancelamos búsquedas en curso para no sobreescribir el estado optimista
+      await queryClient.cancelQueries({ queryKey: ['observaciones'] });
+      const previousObservaciones = queryClient.getQueryData(['observaciones']);
+
+      // Quitamos el pin de la UI inmediatamente
+      queryClient.setQueryData(['observaciones'], (old: Observacion[] | undefined) => 
+        old?.filter(obs => obs.id !== id)
+      );
+
+      return { previousObservaciones };
     },
-    onError: (error: any) => {
-      toast({
-        title: 'Error al eliminar',
-        description: error.message,
-        variant: 'destructive',
-      });
+    onError: (err, id, context) => {
+      // Si falla, revertimos al estado anterior
+      queryClient.setQueryData(['observaciones'], context?.previousObservaciones);
+      toast({ title: 'Error al eliminar', variant: 'destructive' });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['observaciones'] });
     },
   });
 
   return {
     observaciones: query.data ?? [],
     isLoading: query.isLoading,
-    error: query.error,
-    createObservacion,
-    updateObservacion,
-    deleteObservacion,
+    createObservacion: createObservacion.mutate,
+    deleteObservacion: deleteObservacion.mutate,
     refetch: query.refetch,
   };
 }
