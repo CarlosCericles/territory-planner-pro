@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Menu, LogOut, Users, Plus, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import NewTerritoryDialog from '@/components/map/NewTerritoryDialog';
+import UserManagementModal from '@/components/admin/UserManagementModal'; // Importar el nuevo modal
 
 const TerritoryMap = lazy(() => import('@/components/map/TerritoryMap'));
 
@@ -19,7 +20,8 @@ const Index = () => {
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isAddingPin, setIsAddingPin] = useState(false);
   
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isNewTerritoryDialogOpen, setIsNewTerritoryDialogOpen] = useState(false);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false); // Estado para el modal de usuarios
   const [newPolygon, setNewPolygon] = useState(null);
 
   const fetchData = async () => {
@@ -46,7 +48,7 @@ const Index = () => {
 
   const handlePolygonDrawn = (geojson: any) => {
     setNewPolygon(geojson);
-    setIsDialogOpen(true);
+    setIsNewTerritoryDialogOpen(true);
     setIsDrawingMode(false);
   };
 
@@ -65,7 +67,7 @@ const Index = () => {
       
       toast.success(`Territorio ${numero} guardado correctamente`);
       fetchData(); // Refrescar
-      setIsDialogOpen(false);
+      setIsNewTerritoryDialogOpen(false);
       setNewPolygon(null);
     } catch (error: any) {
       toast.error("Error al guardar el territorio: " + error.message);
@@ -109,7 +111,12 @@ const Index = () => {
         
         {isAdmin && (
           <>
-            <Button variant="secondary" size="icon" className="bg-white shadow-xl text-slate-900 hover:bg-slate-100 border-none">
+            <Button 
+              variant="secondary" 
+              size="icon" 
+              className="bg-white shadow-xl text-slate-900 hover:bg-slate-100 border-none"
+              onClick={() => setIsUserModalOpen(true)} // Abrir el modal de usuarios
+            >
               <Users className="h-5 w-5" />
             </Button>
             <Button 
@@ -133,13 +140,15 @@ const Index = () => {
       />
       
       <NewTerritoryDialog 
-        isOpen={isDialogOpen}
+        isOpen={isNewTerritoryDialogOpen}
         onSave={handleSaveTerritory}
         onCancel={() => {
-          setIsDialogOpen(false);
+          setIsNewTerritoryDialogOpen(false);
           setNewPolygon(null);
         }}
       />
+
+      {isAdmin && <UserManagementModal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} />} {/* Añadir el modal */}
 
       <main className="flex-1 h-full w-full relative z-0">
         <Suspense fallback={<div className="h-full w-full bg-slate-800 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-white"/></div>}>
@@ -150,7 +159,7 @@ const Index = () => {
             isAdmin={isAdmin}
             isDrawingMode={isDrawingMode}
             isAddingPin={isAddingPin}
-            onPolygonCreated={handlePolygonDrawn} // Cambiado a handlePolygonDrawn
+            onPolygonCreated={handlePolygonDrawn}
           />
         </Suspense>
       </main>
