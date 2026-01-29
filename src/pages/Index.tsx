@@ -23,10 +23,7 @@ const Index = () => {
   const { territorios, isLoading: territoriosLoading, createTerritorio, updateEstado, refreshTerritorios } = useTerritorios();
   
   const [selectedTerritorio, setSelectedTerritorio] = useState<Territorio | null>(null);
-  
-  // Hook de observaciones para el territorio seleccionado
   const { observaciones, createObservacion, deleteObservacion } = useObservaciones(selectedTerritorio?.id);
-  // Hook de observaciones globales para mostrar en el mapa
   const { observaciones: allObservaciones } = useObservaciones();
 
   const [isDrawingMode, setIsDrawingMode] = useState(false);
@@ -47,34 +44,20 @@ const Index = () => {
 
   const handleCreateSubmit = async (data: any) => {
     try {
+      // Ajuste de nombres de columnas para Supabase
       await createTerritorio({
-        ...data,
-        geojson: pendingPolygon,
+        number: data.number || data.numero,
+        name: data.name || data.nombre,
+        boundary: pendingPolygon, // Supabase suele usar 'boundary'
         status: 'disponible'
       });
       setShowCreateDialog(false);
       setPendingPolygon(null);
       toast.success("Territorio creado con éxito");
       if (refreshTerritorios) refreshTerritorios();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al crear:", error);
-      toast.error("Error al guardar el territorio");
-    }
-  };
-
-  const handleAddObservacion = async (data: any) => {
-    if (!selectedTerritorio || !pendingPinCoords) return;
-    try {
-      await createObservacion({
-        territorio_id: selectedTerritorio.id,
-        coordenadas: pendingPinCoords,
-        ...data
-      });
-      setShowObservacionDialog(false);
-      setPendingPinCoords(null);
-      toast.success("Observación añadida");
-    } catch (error) {
-      toast.error("Error al añadir observación");
+      toast.error(error.message || "Error al guardar el territorio");
     }
   };
 
@@ -90,8 +73,8 @@ const Index = () => {
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      {/* Header fijo */}
-      <header className="z-50 flex h-14 items-center justify-between border-b bg-card px-4 sticky top-0">
+      {/* Header con Z-Index bajo para no tapar el panel lateral */}
+      <header className="z-[30] flex h-14 items-center justify-between border-b bg-card px-4 sticky top-0">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-primary" />
           <h1 className="text-lg font-semibold">Territorios</h1>
@@ -123,7 +106,6 @@ const Index = () => {
       </header>
 
       <div className="relative flex-1 overflow-hidden">
-        {/* Mapa principal */}
         <TerritoryMap
           territorios={territorios || []}
           observaciones={allObservaciones || []}
@@ -134,14 +116,12 @@ const Index = () => {
             setIsDrawingMode(false);
             setShowCreateDialog(true);
           }}
-          onAddObservacion={(coords: {lat: number, lng: number}) => {
+          onAddObservacion={(coords) => {
             setPendingPinCoords(coords);
             setIsPinMode(false);
             setShowObservacionDialog(true);
           }}
-          onToggleEdge={(id: string, index: number) => {
-            // Lógica para marcar/desmarcar bordes si se requiere desde el mapa
-          }}
+          onToggleEdge={() => {}}
           onDeleteObservacion={deleteObservacion}
           isAdmin={isAdmin}
           isDrawingMode={isDrawingMode}
@@ -149,7 +129,6 @@ const Index = () => {
           isEdgeEditMode={isEdgeEditMode}
         />
 
-        {/* Botón flotante para abrir la lista lateral */}
         <Button 
           className="absolute bottom-6 left-6 z-[40] shadow-2xl rounded-full px-6" 
           onClick={() => setShowSidebar(true)}
@@ -158,13 +137,17 @@ const Index = () => {
           Lista
         </Button>
 
-        {/* PANEL DE DETALLES (Derecha) - Solo carga si hay selección */}
+        {/* PANEL DE DETALLES - Z-60 para que tape el Header y el mapa */}
         {selectedTerritorio && (
-          <div className="absolute top-0 right-0 h-full z-[100] w-80 shadow-2xl animate-in slide-in-from-right duration-300">
+          <div className="fixed inset-y-0 right-0 z-[60] w-full sm:w-80 shadow-2xl bg-white animate-in slide-in-from-right duration-300">
             <TerritoryDetails
               territorio={selectedTerritorio}
               onClose={() => setSelectedTerritorio(null)}
-              onChangeEstado={updateEstado}
+              onChangeEstado={(estado) => {
+                updateEstado(selectedTerritorio.id, estado);
+                // Actualizamos el estado local para que el panel refleje el cambio
+                setSelectedTerritorio({...selectedTerritorio, estado: estado, status: estado});
+              }}
               onAddPin={() => setIsPinMode(true)}
               onToggleEdgeEdit={() => setIsEdgeEditMode(!isEdgeEditMode)}
               isAddingPin={isPinMode}
@@ -174,7 +157,6 @@ const Index = () => {
           </div>
         )}
 
-        {/* Barra lateral de lista de territorios */}
         <TerritorySidebar
           territorios={territorios || []}
           observaciones={allObservaciones || []}
@@ -188,7 +170,6 @@ const Index = () => {
         />
       </div>
 
-      {/* Modales y Formularios */}
       <CreateTerritorioForm
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
@@ -200,7 +181,16 @@ const Index = () => {
       <ObservacionForm
         open={showObservacionDialog}
         onOpenChange={setShowObservacionDialog}
-        onSubmit={handleAddObservacion}
+        onSubmit={(data) => {
+            if (!selectedTerritorio || !pendingPinCoords) return;
+            createObservacion({
+              territorio_id: selectedTerritorio.id,
+              coordenadas: pendingPinCoords,
+              ...data
+            });
+            setShowObservacionDialog(false);
+            setPendingPinCoords(null);
+        }}
       />
 
       <UserManagementModal 
