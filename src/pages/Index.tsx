@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { TerritorySidebar } from "@/components/layout/TerritorySidebar";
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Menu, LogOut, Users, Plus, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+const TerritoryMap = lazy(() => import('@/components/map/TerritoryMap'));
 
 const Index = () => {
   const { isAdmin, signOut } = useAuth();
@@ -16,11 +17,6 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isAddingPin, setIsAddingPin] = useState(false);
-
-  const TerritoryMap = useMemo(() => dynamic(() => import('@/components/map/TerritoryMap'), { 
-    ssr: false,
-    loading: () => <div className="h-full w-full bg-slate-800 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-white"/></div>
-  }), []);
 
   const fetchData = async () => {
     try {
@@ -124,15 +120,17 @@ const Index = () => {
       />
 
       <main className="flex-1 h-full w-full relative z-0">
-        <TerritoryMap 
-          territorios={territorios}
-          selectedTerritorio={selectedTerritorio}
-          onSelectTerritorio={setSelectedTerritorio}
-          isAdmin={isAdmin}
-          isDrawingMode={isDrawingMode}
-          isAddingPin={isAddingPin}
-          onPolygonCreated={handleCreatePolygon}
-        />
+        <Suspense fallback={<div className="h-full w-full bg-slate-800 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-white"/></div>}>
+          <TerritoryMap 
+            territorios={territorios}
+            selectedTerritorio={selectedTerritorio}
+            onSelectTerritorio={setSelectedTerritorio}
+            isAdmin={isAdmin}
+            isDrawingMode={isDrawingMode}
+            isAddingPin={isAddingPin}
+            onPolygonCreated={handleCreatePolygon}
+          />
+        </Suspense>
       </main>
     </div>
   );
