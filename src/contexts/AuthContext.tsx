@@ -41,7 +41,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // 1. Inicialización de sesión
     const initAuth = async () => {
       try {
         const { data: { session: initSession } } = await supabase.auth.getSession();
@@ -60,7 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
-    // 2. Listener de cambios de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       setSession(currentSession);
       const currentUser = currentSession?.user ?? null;
@@ -93,9 +91,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }),
     signOut: async () => {
       await supabase.auth.signOut();
+      // Limpiamos el estado y redirigimos
       setUser(null);
       setSession(null);
       setUserRole(null);
+      if (typeof window !== 'undefined') {
+        window.location.href = '/#/auth';
+      }
     },
   };
 
