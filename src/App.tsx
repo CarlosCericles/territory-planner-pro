@@ -2,7 +2,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useUser, useSupabaseClient, useSession } from '@supabase/auth-helpers-react';
 import { Toaster } from '@/components/ui/toaster';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast'; // Corrected import path
 import { useTerritorios } from '@/hooks/useTerritorios';
 import type { Territorio } from '@/types/territory';
 
@@ -11,7 +11,6 @@ import Header from '@/components/layout/Header';
 import Spinner from '@/components/ui/Spinner';
 import CreateTerritorioDialog from '@/components/territory/CreateTerritorioDialog';
 
-// Use React.lazy for dynamic import in a Vite/React project
 const TerritoryMap = lazy(() => import('@/components/map/TerritoryMap'));
 
 function App() {
@@ -32,7 +31,6 @@ function App() {
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [newPolygon, setNewPolygon] = useState<object | null>(null);
 
-  // Check for admin role once user is loaded
   useEffect(() => {
     if (user) {
       const checkAdmin = async () => {
@@ -77,12 +75,10 @@ function App() {
     setIsDrawingMode(prev => !prev);
   };
 
-  // Show auth page if no active session
   if (!session) {
     return <AuthPage />;
   }
   
-  // Main application view
   return (
     <div className="flex flex-col h-screen bg-slate-900 text-white">
       <Header
