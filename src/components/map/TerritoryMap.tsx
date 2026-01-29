@@ -72,7 +72,6 @@ export function TerritoryMap({
     };
   }, []);
 
-  // --- CAPTURA DE CLIC PARA PIN ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -92,7 +91,6 @@ export function TerritoryMap({
     return () => { map.off('click', handleMapClick); };
   }, [isAddingPin, mapReady, selectedTerritorio, onAddObservacion]);
 
-  // --- DIBUJO GEOMAN ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -115,14 +113,12 @@ export function TerritoryMap({
     }
   }, [isDrawingMode, mapReady, onPolygonCreated]);
 
-  // --- RENDERIZADO DE CAPAS ---
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layersRef.current) return;
     layersRef.current.clearLayers();
 
     territorios.forEach((t: any) => {
-      // CORRECCIÓN: Buscamos tanto nombres en inglés como en español
       const geo = t.boundary || t.geojson || t.geometria_poligono || t.poligono || t.geometria;
       const estado = t.status || t.estado;
       const numero = t.number || t.numero;
@@ -153,10 +149,8 @@ export function TerritoryMap({
         });
       }
 
-      // Lados completados: ahora manejamos si es un número o un array
       if (isSelected || (estado === 'iniciado' && !isCompletado)) {
         const hechos = Array.isArray(t.lados_completados) ? t.lados_completados : [];
-        
         for (let i = 0; i < coords.length - 1; i++) {
           const esHecho = hechos.includes(i);
           if (isEdgeEditMode || (esHecho && !isCompletado)) {
@@ -205,4 +199,8 @@ export function TerritoryMap({
       <div 
         ref={mapContainerRef} 
         className="h-full w-full" 
-        style={{ minHeight: '600
+        style={{ minHeight: '600px', cursor: (isDrawingMode || isAddingPin) ? 'crosshair' : 'grab', zIndex: 1 }} 
+      />
+    </>
+  );
+}
