@@ -15,7 +15,6 @@ const Index = () => {
   const [observaciones, setObservaciones] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Estados para herramientas (lo que falta)
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isAddingPin, setIsAddingPin] = useState(false);
 
@@ -34,10 +33,29 @@ const Index = () => {
 
   useEffect(() => { fetchData(); }, []);
 
+  const handleCreatePolygon = async (geojson: any) => {
+    try {
+      const { error } = await supabase.from('territorios').insert([{
+        numero: territorios.length + 1,
+        geometria_poligono: geojson,
+        estado: 'disponible'
+      }]);
+
+      if (error) throw error;
+      
+      toast.success("Territorio creado con éxito");
+      fetchData();
+      setIsDrawingMode(false);
+    } catch (error) {
+      toast.error("Error al guardar el territorio");
+      console.error(error);
+    }
+  };
+
   return (
     <div className="flex h-screen w-full flex-col bg-slate-900 overflow-hidden">
-      {/* BARRA SUPERIOR NUEVA */}
-      <header className="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-[1001]">
+      {/* BARRA SUPERIOR - z-[1001] para estar sobre el mapa */}
+      <header className="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-[1001] shrink-0">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)} className="text-white">
             <Menu className="h-5 w-5" />
@@ -52,7 +70,7 @@ const Index = () => {
                 variant={isDrawingMode ? "default" : "outline"} 
                 size="sm" 
                 onClick={() => { setIsDrawingMode(!isDrawingMode); setIsAddingPin(false); }}
-                className={isDrawingMode ? "bg-blue-600" : "text-white border-slate-700"}
+                className={isDrawingMode ? "bg-blue-600 hover:bg-blue-700" : "text-white border-slate-700"}
               >
                 <Plus className="h-4 w-4 mr-1" /> Nuevo Polígono
               </Button>
@@ -60,7 +78,7 @@ const Index = () => {
                 variant={isAddingPin ? "default" : "outline"} 
                 size="sm" 
                 onClick={() => { setIsAddingPin(!isAddingPin); setIsDrawingMode(false); }}
-                className={isAddingPin ? "bg-orange-600" : "text-white border-slate-700"}
+                className={isAddingPin ? "bg-orange-600 hover:bg-orange-700" : "text-white border-slate-700"}
               >
                 <MapPin className="h-4 w-4 mr-1" /> Añadir Nota
               </Button>
@@ -75,7 +93,7 @@ const Index = () => {
         </div>
       </header>
 
-      <div className="flex-1 relative">
+      <div className="flex-1 relative flex overflow-hidden">
         <TerritorySidebar 
           territorios={territorios}
           observaciones={observaciones}
@@ -85,7 +103,8 @@ const Index = () => {
           onClose={() => setIsSidebarOpen(false)}
         />
 
-        <main className="h-full w-full">
+        {/* El MAIN con z-0 para no tapar la barra superior */}
+        <main className="flex-1 h-full w-full relative z-0">
           <TerritoryMap 
             territorios={territorios}
             selectedTerritorio={selectedTerritorio}
@@ -93,15 +112,7 @@ const Index = () => {
             isAdmin={isAdmin}
             isDrawingMode={isDrawingMode}
             isAddingPin={isAddingPin}
-            onPolygonCreated={async (geojson) => {
-               // Función para guardar el nuevo polígono
-               const { error } = await supabase.from('territorios').insert([{
-                 numero: territorios.length + 1,
-                 geometria_poligono: geojson,
-                 estado: 'disponible'
-               }]);
-               if (!error) { fetchData(); setIsDrawingMode(false); toast.success("Territorio creado"); }
-            }}
+            onPolygonCreated={handleCreatePolygon}
           />
         </main>
       </div>
