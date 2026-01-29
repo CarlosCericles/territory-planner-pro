@@ -1,10 +1,18 @@
 import React, { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Polygon, useMap, ZoomControl } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, useMap, ZoomControl, LayersControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Territorio } from '@/types/territory';
 
-// Icon fix for Leaflet
+// Coordenadas y límites para Bernardo de Irigoyen
+const BDI_CENTER: L.LatLngTuple = [-26.255, -53.645];
+const BDI_BOUNDS: L.LatLngBoundsLiteral = [
+  [-26.3, -53.7],
+  [-26.2, -53.6]
+];
+const MIN_ZOOM = 14;
+
+// Icon fix para Leaflet
 if (typeof window !== 'undefined') {
   delete (L.Icon.Default.prototype as any)._getIconUrl;
   L.Icon.Default.mergeOptions({
@@ -14,7 +22,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// Geoman controls with safe loading
+// Controles de Geoman para dibujar polígonos
 function GeomanControls({ isDrawingMode, onPolygonCreated }: any) {
   const map = useMap();
   
@@ -56,6 +64,7 @@ function GeomanControls({ isDrawingMode, onPolygonCreated }: any) {
   return null;
 }
 
+// Componente principal del mapa
 const TerritoryMap = ({
   territorios = [],
   selectedTerritorio,
@@ -75,13 +84,28 @@ const TerritoryMap = ({
   return (
     <div className="h-full w-full bg-slate-900 relative z-0">
       <MapContainer
-        center={[-26.25, -53.64]} 
+        center={BDI_CENTER}
         zoom={15}
+        minZoom={MIN_ZOOM}
+        maxBounds={BDI_BOUNDS}
         style={{ height: "100%", width: "100%" }}
         zoomControl={false}
         whenReady={(mapInstance) => { mapRef.current = mapInstance.target; }}
       >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <LayersControl position="topright">
+          <LayersControl.BaseLayer checked name="Mapa de Calles">
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Vista Satelital">
+            <TileLayer
+              attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            />
+          </LayersControl.BaseLayer>
+        </LayersControl>
         
         <ZoomControl position="bottomright" />
 
