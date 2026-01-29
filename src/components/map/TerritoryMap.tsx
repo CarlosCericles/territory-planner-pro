@@ -1,14 +1,13 @@
-import React, { useRef, useEffect, useState } from 'react';
-// CSS imports remain
-import 'mapbox-gl/dist/mapbox-gl.css';
-import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import type { Territorio, TerritorioEstado } from '@/types/territory';
 
-// Type-only imports for mapbox. These don't get included in the build.
-import type { Map, LngLat, LngLatBounds, LngLatLike, Popup } from 'mapbox-gl';
-import type MapboxDraw from '@mapbox/mapbox-gl-draw';
+import React, { useRef, useEffect, useState } from 'react';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet-draw/dist/leaflet.draw.css';
+import type { Territorio, TerritorioEstado } from '@/types/territory';
+import type { Map, GeoJSON, Layer } from 'leaflet';
+
+// To fix icon issues with webpack
+import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css'; 
+import 'leaflet-defaulticon-compatibility';
 
 interface TerritoryMapProps {
   territorios: Territorio[];
@@ -20,99 +19,72 @@ interface TerritoryMapProps {
   onPolygonCreated: (geojson: any) => void;
 }
 
-// Module-level state to hold the dynamically imported libraries
-let mapboxgl: typeof import('mapbox-gl') | null = null;
-let Draw: typeof MapboxDraw | null = null;
+// We will load Leaflet and Leaflet-draw dynamically
+let L: typeof import('leaflet') | null = null;
 
 const TerritoryMap: React.FC<TerritoryMapProps> = ({ 
   territorios, selectedTerritorio, onSelectTerritorio, onUpdateStatus, isAdmin, isDrawingMode, onPolygonCreated 
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<Map | null>(null);
-  const draw = useRef<MapboxDraw | null>(null);
-  const popup = useRef<Popup | null>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const geoJsonLayer = useRef<GeoJSON | null>(null);
+  const drawnItems = useRef<any>(null); // FeatureGroup for drawn items
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    const initializeMap = async () => {
-      // Import libraries dynamically
-      mapboxgl = (await import('mapbox-gl')).default;
-      Draw = (await import('@mapbox/mapbox-gl-draw')).default;
-
-      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
-      setMapLoaded(true);
-    };
-
-    initializeMap().catch(error => console.error("Failed to load map libraries", error));
-  }, []);
-
-  useEffect(() => {
-    if (!mapLoaded || !mapContainer.current || !mapboxgl || !Draw || map.current) return;
-
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/satellite-streets-v12',
-      center: [-68.8458, -32.8895], // Mendoza, Argentina
-      zoom: 13,
-    });
-
-    draw.current = new Draw({
-      displayControlsDefault: false,
-      controls: { polygon: true, trash: true },
-      userProperties: true,
-    });
-
-    map.current.addControl(draw.current, 'top-left');
-    map.current.addControl(new mapboxgl.NavigationControl());
-
-    map.current.on('load', () => {
-      if (!map.current) return;
-      map.current.addSource('territorios', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.current.addLayer({
-        id: 'territorios-fill',
-        type: 'fill',
-        source: 'territorios',
-        paint: {
-          'fill-color': ['get', 'color'],
-          'fill-opacity': 0.3,
-        },
-      });
-      map.current.addLayer({
-        id: 'territorios-outline',
-        type: 'line',
-        source: 'territorios',
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 2,
-        },
-      });
-      updateMapData(territorios);
-    });
-
-    map.current.on('click', 'territorios-fill', (e: any) => {
-      if (!e.features || e.features.length === 0) return;
-      const feature = e.features[0];
-      const territoryId = feature.properties.id;
-      const territory = territorios.find(t => t.id === territoryId);
-      if (territory) {
-        createTerritoryPopup(e.lngLat, territory);
-        onSelectTerritorio(territory);
+    setIsMounted(true);
+    // Dynamically import Leaflet
+    import('leaflet').then(leaflet => {
+      L = leaflet;
+      // Also import leaflet-draw
+      import('leaflet-draw');
+      // Trigger a re-render or initialization now that L is available
+      if(mapContainer.current) {
+        initializeMap();
       }
-    });
+    }).catch(error => console.error("Failed to load Leaflet", error));
 
-    map.current.on('draw.create', (e) => {
-      if (e.features.length > 0) {
-        onPolygonCreated(e.features[0].geometry);
-        draw.current?.deleteAll();
-      }
-    });
-
-    // Cleanup on unmount
     return () => {
       map.current?.remove();
-      map.current = null;
     };
-  }, [mapLoaded]);
+  }, []);
+
+  const initializeMap = () => {
+    if (!L || !mapContainer.current || map.current) return;
+
+    map.current = L.map(mapContainer.current).setView([-32.8895, -68.8458], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map.current);
+
+    // Layer for existing territories
+    geoJsonLayer.current = L.geoJSON().addTo(map.current);
+
+    // Layer for drawing
+    drawnItems.current = new L.FeatureGroup();
+    map.current.addLayer(drawnItems.current);
+
+    // Drawing controls
+    const drawControl = new (L.Control as any).Draw({
+      edit: { featureGroup: drawnItems.current, edit: false, remove: false },
+      draw: {
+        polygon: { shapeOptions: { color: '#f97316' } },
+        polyline: false,
+        rectangle: false,
+        circle: false,
+        marker: false,
+        circlemarker: false,
+      }
+    });
+    map.current.addControl(drawControl);
+
+    map.current.on('draw:created', (e: any) => {
+      const layer = e.layer;
+      const geojson = layer.toGeoJSON().geometry;
+      onPolygonCreated(geojson);
+    });
+  }
 
   const getColorForEstado = (estado: TerritorioEstado) => {
     switch (estado) {
@@ -121,65 +93,64 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
       default: return '#64748b'; // slate-500
     }
   };
-  
-  const updateMapData = (data: Territorio[]) => {
-    if (!map.current || !map.current.isStyleLoaded() || !map.current.getSource('territorios')) return;
-    const geojsonData = {
-      type: 'FeatureCollection',
-      features: data.map(t => ({
+
+  useEffect(() => {
+    if (!L || !geoJsonLayer.current || !map.current) return;
+
+    geoJsonLayer.current.clearLayers();
+    const features = territorios.map(t => ({
         type: 'Feature',
         geometry: t.geometria_poligono,
         properties: { ...t, color: getColorForEstado(t.estado) },
-      })),
-    };
-    (map.current.getSource('territorios') as any).setData(geojsonData);
-  };
+    }));
+
+    geoJsonLayer.current.addData(features as any);
+    geoJsonLayer.current.setStyle(feature => ({
+        color: feature?.properties.color,
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.3,
+    }));
+
+    geoJsonLayer.current.on('click', (e: any) => {
+        const territory = e.layer.feature.properties;
+        onSelectTerritorio(territory);
+        if (L) {
+            createTerritoryPopup(e.latlng, territory);
+        }
+    });
+  }, [territorios, L]); // Depend on L to ensure it's loaded
 
   useEffect(() => {
-    if (map.current) {
-        updateMapData(territorios);
-    }
-  }, [territorios]);
-
-  useEffect(() => {
-    if (!draw.current) return;
-    if (isDrawingMode) {
-      draw.current.changeMode('draw_polygon');
-    } else {
-      draw.current.changeMode('simple_select');
-    }
-  }, [isDrawingMode]);
-  
-  useEffect(() => {
-    if (!selectedTerritorio || !map.current || !mapboxgl) {
-        if(popup.current) popup.current.remove();
-        return
-    };
+    if (!map.current || !L) return;
     
-    const feature = territorios.find(t => t.id === selectedTerritorio.id);
-    if (feature && feature.geometria_poligono) {
-      try {
-        const coordinates = (feature.geometria_poligono as any).coordinates[0];
-        if (!coordinates || coordinates.length === 0) return;
-
-        const bounds = coordinates.reduce((b, coord) => {
-          return b.extend(coord);
-        }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
-        
-        map.current.fitBounds(bounds, { padding: 100 });
-        createTerritoryPopup(bounds.getCenter(), selectedTerritorio);
-      } catch (error) {
-        console.error("Error calculating bounds:", error);
-      }
+    // Toggle drawing mode
+    const drawHandler = (L.draw as any).polygon(map.current);
+    if (isDrawingMode) {
+        drawHandler.enable();
     } else {
-      popup.current?.remove();
+        drawHandler.disable();
     }
-  }, [selectedTerritorio]);
 
+  }, [isDrawingMode, L]);
 
-  const createTerritoryPopup = (lngLat: LngLatLike, territory: Territorio) => {
-    if (!map.current || !mapboxgl) return;
-    popup.current?.remove();
+  useEffect(() => {
+    if (!selectedTerritorio || !map.current || !L || !geoJsonLayer.current) return;
+
+    const featureLayer = geoJsonLayer.current.getLayers().find(layer => {
+        return (layer as any).feature.properties.id === selectedTerritorio.id;
+    }) as any;
+
+    if (featureLayer) {
+        const bounds = featureLayer.getBounds();
+        map.current.fitBounds(bounds, { padding: [50, 50] });
+        createTerritoryPopup(bounds.getCenter(), selectedTerritorio);
+    } 
+
+  }, [selectedTerritorio, L]);
+
+  const createTerritoryPopup = (latlng: any, territory: Territorio) => {
+    if (!L || !map.current) return;
 
     const popupContent = `
       <div class="bg-slate-800 text-white rounded-lg p-1 max-w-xs w-full">
@@ -195,19 +166,24 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
       </div>
     `;
 
-    popup.current = new mapboxgl.Popup({ closeButton: false, className: 'custom-popup' })
-      .setLngLat(lngLat)
-      .setHTML(popupContent)
-      .addTo(map.current!);
-    
+    const popup = L.popup({ closeButton: false, className: 'custom-popup' })
+      .setLatLng(latlng)
+      .setContent(popupContent)
+      .openOn(map.current);
+
+    // The popup content is not part of the React DOM, so we need to add the event listener manually.
     const select = document.getElementById(`status-select-${territory.id}`);
     if (select) {
       select.addEventListener('change', (e) => {
         const newStatus = (e.target as HTMLSelectElement).value as TerritorioEstado;
         onUpdateStatus(territory.id, newStatus);
-        popup.current?.remove();
+        map.current?.closePopup();
       });
     }
+  }
+
+  if (!isMounted) {
+    return <div className="w-full h-full bg-slate-900 flex items-center justify-center"><p>Loading map...</p></div>;
   }
 
   return <div ref={mapContainer} className="w-full h-full" />;
