@@ -1,13 +1,14 @@
-import React, { useRef, useEffect } from 'react';
-import mapboxgl from 'mapbox-gl';
+import React, { useRef, useEffect, useState } from 'react';
+// CSS imports remain
 import 'mapbox-gl/dist/mapbox-gl.css';
-import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
 
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+// Type-only imports for mapbox. These don't get included in the build.
+import type { Map, LngLat, LngLatBounds, LngLatLike, Popup } from 'mapbox-gl';
+import type MapboxDraw from '@mapbox/mapbox-gl-draw';
 
 interface TerritoryMapProps {
   territorios: Territorio[];
@@ -19,16 +20,34 @@ interface TerritoryMapProps {
   onPolygonCreated: (geojson: any) => void;
 }
 
+// Module-level state to hold the dynamically imported libraries
+let mapboxgl: typeof import('mapbox-gl') | null = null;
+let Draw: typeof MapboxDraw | null = null;
+
 const TerritoryMap: React.FC<TerritoryMapProps> = ({ 
   territorios, selectedTerritorio, onSelectTerritorio, onUpdateStatus, isAdmin, isDrawingMode, onPolygonCreated 
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
+  const map = useRef<Map | null>(null);
   const draw = useRef<MapboxDraw | null>(null);
-  const popup = useRef<mapboxgl.Popup | null>(null);
+  const popup = useRef<Popup | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   useEffect(() => {
-    if (map.current || !mapContainer.current) return;
+    const initializeMap = async () => {
+      // Import libraries dynamically
+      mapboxgl = (await import('mapbox-gl')).default;
+      Draw = (await import('@mapbox/mapbox-gl-draw')).default;
+
+      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+      setMapLoaded(true);
+    };
+
+    initializeMap().catch(error => console.error("Failed to load map libraries", error));
+  }, []);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapContainer.current || !mapboxgl || !Draw || map.current) return;
 
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
@@ -37,7 +56,7 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
       zoom: 13,
     });
 
-    draw.current = new MapboxDraw({
+    draw.current = new Draw({
       displayControlsDefault: false,
       controls: { polygon: true, trash: true },
       userProperties: true,
@@ -47,8 +66,9 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
     map.current.addControl(new mapboxgl.NavigationControl());
 
     map.current.on('load', () => {
-      map.current!.addSource('territorios', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.current!.addLayer({
+      if (!map.current) return;
+      map.current.addSource('territorios', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.current.addLayer({
         id: 'territorios-fill',
         type: 'fill',
         source: 'territorios',
@@ -57,7 +77,7 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
           'fill-opacity': 0.3,
         },
       });
-      map.current!.addLayer({
+      map.current.addLayer({
         id: 'territorios-outline',
         type: 'line',
         source: 'territorios',
@@ -66,7 +86,6 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
           'line-width': 2,
         },
       });
-
       updateMapData(territorios);
     });
 
@@ -82,12 +101,18 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
     });
 
     map.current.on('draw.create', (e) => {
-        if (e.features.length > 0) {
-            onPolygonCreated(e.features[0].geometry);
-            draw.current?.deleteAll();
-        }
+      if (e.features.length > 0) {
+        onPolygonCreated(e.features[0].geometry);
+        draw.current?.deleteAll();
+      }
     });
-  }, []);
+
+    // Cleanup on unmount
+    return () => {
+      map.current?.remove();
+      map.current = null;
+    };
+  }, [mapLoaded]);
 
   const getColorForEstado = (estado: TerritorioEstado) => {
     switch (estado) {
@@ -96,9 +121,9 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
       default: return '#64748b'; // slate-500
     }
   };
-
+  
   const updateMapData = (data: Territorio[]) => {
-    if (!map.current || !map.current.getSource('territorios')) return;
+    if (!map.current || !map.current.isStyleLoaded() || !map.current.getSource('territorios')) return;
     const geojsonData = {
       type: 'FeatureCollection',
       features: data.map(t => ({
@@ -107,11 +132,13 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
         properties: { ...t, color: getColorForEstado(t.estado) },
       })),
     };
-    (map.current.getSource('territorios') as mapboxgl.GeoJSONSource).setData(geojsonData as any);
+    (map.current.getSource('territorios') as any).setData(geojsonData);
   };
 
   useEffect(() => {
-    updateMapData(territorios);
+    if (map.current) {
+        updateMapData(territorios);
+    }
   }, [territorios]);
 
   useEffect(() => {
@@ -124,16 +151,25 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
   }, [isDrawingMode]);
   
   useEffect(() => {
-    if (selectedTerritorio && map.current) {
-      const feature = territorios.find(t => t.id === selectedTerritorio.id);
-      if (feature && feature.geometria_poligono) {
+    if (!selectedTerritorio || !map.current || !mapboxgl) {
+        if(popup.current) popup.current.remove();
+        return
+    };
+    
+    const feature = territorios.find(t => t.id === selectedTerritorio.id);
+    if (feature && feature.geometria_poligono) {
+      try {
         const coordinates = (feature.geometria_poligono as any).coordinates[0];
-        const bounds = new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]);
-        for (const coord of coordinates) {
-          bounds.extend(coord);
-        }
+        if (!coordinates || coordinates.length === 0) return;
+
+        const bounds = coordinates.reduce((b, coord) => {
+          return b.extend(coord);
+        }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+        
         map.current.fitBounds(bounds, { padding: 100 });
         createTerritoryPopup(bounds.getCenter(), selectedTerritorio);
+      } catch (error) {
+        console.error("Error calculating bounds:", error);
       }
     } else {
       popup.current?.remove();
@@ -141,7 +177,8 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
   }, [selectedTerritorio]);
 
 
-  const createTerritoryPopup = (lngLat: mapboxgl.LngLatLike, territory: Territorio) => {
+  const createTerritoryPopup = (lngLat: LngLatLike, territory: Territorio) => {
+    if (!map.current || !mapboxgl) return;
     popup.current?.remove();
 
     const popupContent = `
@@ -161,7 +198,7 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
     popup.current = new mapboxgl.Popup({ closeButton: false, className: 'custom-popup' })
       .setLngLat(lngLat)
       .setHTML(popupContent)
-      .addTo(map.current!)
+      .addTo(map.current!);
     
     const select = document.getElementById(`status-select-${territory.id}`);
     if (select) {
