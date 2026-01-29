@@ -148,3 +148,52 @@ export function UserManagementModal({ isOpen, onClose }: { isOpen: boolean, onCl
                     </TableCell>
                   </TableRow>
                 ) : (
+                  users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <div className="font-medium">{user.name}</div>
+                        <div className="text-sm text-muted-foreground">{user.email}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                          {user.role === 'admin' ? 'Admin' : 'Publicador'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={user.role === 'admin' ? "Quitar Admin" : "Hacer Admin"}
+                            onClick={() => toggleAdmin(user.id, user.role)}
+                          >
+                            <UserCheck className={`w-4 h-4 ${user.role === 'admin' ? 'text-blue-600' : 'text-gray-400'}`} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Eliminar usuario"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => deleteUser(user.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        
+        <div className="flex justify-end mt-4">
+            <Button variant="outline" onClick={onClose}>
+              Cerrar
+            </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
