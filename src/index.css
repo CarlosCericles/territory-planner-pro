@@ -2,146 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Territory Management System - Minimalist Design System */
-
 @layer base {
   :root {
     --background: 0 0% 98%;
     --foreground: 220 13% 13%;
-
     --card: 0 0% 100%;
     --card-foreground: 220 13% 13%;
-
     --popover: 0 0% 100%;
     --popover-foreground: 220 13% 13%;
-
     --primary: 220 13% 18%;
     --primary-foreground: 0 0% 98%;
-
     --secondary: 220 9% 94%;
     --secondary-foreground: 220 13% 18%;
-
     --muted: 220 9% 94%;
     --muted-foreground: 220 9% 46%;
-
     --accent: 220 9% 94%;
     --accent-foreground: 220 13% 18%;
-
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-
     --border: 220 13% 90%;
     --input: 220 13% 90%;
     --ring: 220 13% 18%;
-
     --radius: 0.5rem;
 
     /* Territory state colors */
     --territory-pending: 220 9% 70%;
     --territory-started: 32 95% 55%;
     --territory-completed: 142 71% 45%;
-    
-    /* Map specific */
-    --map-overlay: 220 13% 13%;
-
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 220 13% 13%;
-    --sidebar-primary: 220 13% 18%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 220 9% 94%;
-    --sidebar-accent-foreground: 220 13% 18%;
-    --sidebar-border: 220 13% 90%;
-    --sidebar-ring: 220 13% 18%;
   }
 
   .dark {
     --background: 220 13% 8%;
     --foreground: 0 0% 95%;
-
     --card: 220 13% 11%;
     --card-foreground: 0 0% 95%;
-
-    --popover: 220 13% 11%;
-    --popover-foreground: 0 0% 95%;
-
     --primary: 0 0% 95%;
     --primary-foreground: 220 13% 8%;
-
-    --secondary: 220 13% 16%;
-    --secondary-foreground: 0 0% 95%;
-
-    --muted: 220 13% 16%;
-    --muted-foreground: 220 9% 60%;
-
-    --accent: 220 13% 16%;
-    --accent-foreground: 0 0% 95%;
-
-    --destructive: 0 62% 40%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 220 13% 20%;
-    --input: 220 13% 20%;
-    --ring: 0 0% 80%;
-
-    /* Territory state colors - dark mode */
     --territory-pending: 220 9% 45%;
     --territory-started: 32 85% 50%;
     --territory-completed: 142 61% 40%;
-
-    --sidebar-background: 220 13% 8%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 0 0% 95%;
-    --sidebar-primary-foreground: 220 13% 8%;
-    --sidebar-accent: 220 13% 16%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 220 13% 20%;
-    --sidebar-ring: 0 0% 80%;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-
+  * { @apply border-border; }
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
-
-  /* Prevent pull-to-refresh on mobile */
-  html, body {
     overscroll-behavior: none;
   }
 }
 
 @layer components {
-  /* Leaflet map overrides for minimalist theme */
+  /* Leaflet & Layout Fixes */
   .leaflet-container {
-    @apply bg-muted font-sans;
+    @apply font-sans;
+    z-index: 1 !important;
+    margin-top: 56px !important; /* Altura exacta del header h-14 */
+    height: calc(100vh - 56px) !important;
   }
 
-  .leaflet-control-zoom {
-    @apply border-none shadow-lg;
+  /* Evitar que el header quede oculto */
+  header {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 50 !important; 
+    background-color: hsl(var(--card)) !important;
   }
 
-  .leaflet-control-zoom a {
-    @apply bg-card text-foreground border-border;
+  /* Controles de Leaflet por debajo de nuestros diálogos (z-50) */
+  .leaflet-control-container .leaflet-top,
+  .leaflet-control-container .leaflet-bottom {
+    z-index: 40 !important;
   }
 
-  .leaflet-control-zoom a:hover {
-    @apply bg-accent;
+  /* Ajuste de posición del zoom para no chocar con el header */
+  .leaflet-top.leaflet-left {
+    margin-top: 10px !important;
   }
 
-  .leaflet-popup-content-wrapper {
-    @apply bg-card text-card-foreground rounded-lg shadow-lg border border-border;
-  }
-
-  .leaflet-popup-tip {
-    @apply bg-card;
-  }
-
-  /* Territory polygon styles */
+  /* Polígonos */
   .territory-pending {
     fill: hsl(var(--territory-pending));
     stroke: hsl(var(--territory-pending));
@@ -163,90 +104,15 @@
     stroke-opacity: 0.9;
   }
 
-  /* Touch-friendly buttons */
-  .touch-btn {
-    @apply min-h-[48px] min-w-[48px] text-base;
-  }
-
-  /* Panel animations */
-  .panel-slide-up {
-    animation: slideUp 0.3s ease-out;
-  }
-
-  @keyframes slideUp {
-    from {
-      transform: translateY(100%);
-    }
-    to {
-      transform: translateY(0);
-    }
-  }
-
-  /* Offline indicator */
-  .offline-badge {
-    @apply fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-destructive text-destructive-foreground px-4 py-2 rounded-full text-sm font-medium shadow-lg;
+  /* Forzar visibilidad de modales y paneles de Shadcn */
+  [role="dialog"], 
+  .fixed.inset-y-0.right-0 {
+    z-index: 100 !important;
   }
 }
 
 /* PWA safe area insets */
 @supports (padding: env(safe-area-inset-bottom)) {
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  
-  .safe-top {
-    padding-top: env(safe-area-inset-top);
-  }
-}
-
-/* Geoman toolbar customization */
-.leaflet-pm-toolbar .leaflet-pm-icon-polyline,
-.leaflet-pm-toolbar .leaflet-pm-icon-polygon,
-.leaflet-pm-toolbar .leaflet-pm-icon-marker {
-  @apply bg-card;
-}
-/* --- CORRECCIONES VISUALES FORZADAS --- */
-
-/* 1. Clavar el menú superior arriba y encima del mapa */
-header {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  z-index: 10000 !important; /* Número muy alto para ganar al mapa */
-  background-color: white !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
-/* 2. Empujar el mapa hacia abajo para que no quede detrás del menú */
-.leaflet-container {
-  z-index: 1 !important; /* El mapa al fondo */
-  margin-top: 60px !important; /* Espacio para el header */
-  height: calc(100vh - 60px) !important; /* Resto de la pantalla */
-}
-
-/* 3. El botón azul de "Territorios" (izq) y controles flotantes */
-.leaflet-bottom, .leaflet-top {
-  z-index: 500 !important; /* Encima del mapa, debajo de los paneles */
-}
-
-/* 4. IMPORTANTE: El Panel Lateral (Sheet) que no aparece */
-/* Esto fuerza a cualquier panel lateral a estar MUY encima */
-[data-state="open"], [role="dialog"], .sheet-content {
-  z-index: 20000 !important; /* Máxima prioridad */
-}
-
-/* 5. Asegurar que el botón "Nuevo" y otros sean clickeables */
-button {
-  pointer-events: auto !important;
-}
-/* Baja los botones de zoom de Leaflet para que no los tape nada */
-.leaflet-top.leaflet-left {
-  margin-top: 70px !important;
-  z-index: 40 !important;
-}
-
-/* Asegura que el panel lateral ocupe toda la altura */
-.fixed.inset-y-0.right-0 {
-  height: 100vh !important;
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-top { padding-top: env(safe-area-inset-top); }
 }
