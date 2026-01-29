@@ -1,60 +1,59 @@
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState } from 'react';
 import { TerritorySidebar } from "@/components/layout/TerritorySidebar";
+import { TerritoryMap } from "@/components/map/TerritoryMap";
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from "@/components/ui/button";
-import { Menu, LogOut, Loader2 } from "lucide-react";
-
-// CARGA DINÁMICA: Si el mapa falla, no romperá el resto de la App
-const TerritoryMap = lazy(() => import("@/components/map/TerritoryMap").then(module => ({ default: module.TerritoryMap })));
+import { Menu, LogOut } from "lucide-react";
 
 const Index = () => {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedTerritorio, setSelectedTerritorio] = useState(null);
 
+  // Datos iniciales seguros
+  const territorios = [];
+  const observaciones = [];
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-900 relative">
-      {/* Interfaz de usuario básica (esto DEBERÍA verse siempre) */}
+      {/* Botones de control con Z-index alto para que no los tape el mapa */}
       <div className="absolute top-4 left-4 z-[1000] flex gap-2">
-        <Button variant="secondary" size="icon" onClick={() => setIsSidebarOpen(true)} className="bg-white">
+        <Button 
+          variant="secondary" 
+          size="icon" 
+          onClick={() => setIsSidebarOpen(true)}
+          className="bg-white shadow-md hover:bg-slate-100"
+        >
           <Menu className="h-5 w-5 text-slate-900" />
         </Button>
-        <Button variant="destructive" size="icon" onClick={() => signOut()}>
+        
+        <Button 
+          variant="destructive" 
+          size="icon" 
+          onClick={() => signOut()}
+          className="shadow-md"
+        >
           <LogOut className="h-5 w-5" />
         </Button>
       </div>
 
+      {/* Sidebar lateral */}
       <TerritorySidebar 
-        territorios={[]} 
-        observaciones={[]} 
+        territorios={territorios}
+        observaciones={observaciones}
         selectedTerritorio={selectedTerritorio}
-        onSelectTerritorio={setSelectedTerritorio}
+        onSelectTerritorio={(t) => setSelectedTerritorio(t)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* Contenedor del Mapa con protección */}
-      <main className="flex-1 h-full w-full bg-slate-800">
-        <Suspense fallback={
-          <div className="flex h-full w-full items-center justify-center text-white">
-            <Loader2 className="animate-spin mr-2" /> Cargando Mapa...
-          </div>
-        }>
-          <TerritoryMap 
-            territorios={[]}
-            observaciones={[]}
-            selectedTerritorio={selectedTerritorio}
-            onSelectTerritorio={setSelectedTerritorio}
-            onPolygonCreated={() => {}}
-            onAddObservacion={() => {}}
-            onDeleteObservacion={() => {}}
-            onToggleEdge={() => {}}
-            isAdmin={isAdmin || false}
-            isDrawingMode={false}
-            isAddingPin={false}
-            isEdgeEditMode={false}
-          />
-        </Suspense>
+      {/* El Mapa simplificado - Solo con las props que definimos en el paso anterior */}
+      <main className="flex-1 h-full w-full">
+        <TerritoryMap 
+          territorios={territorios}
+          selectedTerritorio={selectedTerritorio}
+          onSelectTerritorio={setSelectedTerritorio}
+        />
       </main>
     </div>
   );
