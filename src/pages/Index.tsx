@@ -20,7 +20,14 @@ import { toast } from "sonner";
 const Index = () => {
   const navigate = useNavigate();
   const { user, isLoading: authLoading, isAdmin } = useAuth();
-  const { territorios, isLoading: territoriosLoading, createTerritorio, updateEstado, refreshTerritorios } = useTerritorios();
+  
+  // Extraemos las mutaciones directamente para usarlas con .mutate()
+  const { 
+    territorios, 
+    createTerritorio, 
+    updateEstado, 
+    refreshTerritorios 
+  } = useTerritorios();
   
   const [selectedTerritorio, setSelectedTerritorio] = useState<Territorio | null>(null);
   const { observaciones, createObservacion, deleteObservacion } = useObservaciones(selectedTerritorio?.id);
@@ -44,20 +51,20 @@ const Index = () => {
 
   const handleCreateSubmit = async (data: any) => {
     try {
-      // Ajuste de nombres de columnas para Supabase
-      await createTerritorio({
-        number: data.number || data.numero,
-        name: data.name || data.nombre,
-        boundary: pendingPolygon, // Supabase suele usar 'boundary'
-        status: 'disponible'
+      // Sincronizado con useTerritorios.ts: espera 'numero' y 'geometria_poligono'
+      await createTerritorio.mutateAsync({
+        numero: Number(data.number || data.numero),
+        nombre: data.name || data.nombre,
+        geometria_poligono: pendingPolygon!,
+        created_by: user?.id
       });
+      
       setShowCreateDialog(false);
       setPendingPolygon(null);
-      toast.success("Territorio creado con éxito");
-      if (refreshTerritorios) refreshTerritorios();
     } catch (error: any) {
       console.error("Error al crear:", error);
-      toast.error(error.message || "Error al guardar el territorio");
+      // El error ya lo maneja el toast del hook, pero por si acaso:
+      if (!error.message.includes("toast")) toast.error("Error al guardar");
     }
   };
 
@@ -73,7 +80,7 @@ const Index = () => {
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      {/* Header con Z-Index bajo para no tapar el panel lateral */}
+      {/* Header: Z-Index 30 para que el panel lateral (Z-60) lo tape */}
       <header className="z-[30] flex h-14 items-center justify-between border-b bg-card px-4 sticky top-0">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-primary" />
@@ -121,7 +128,21 @@ const Index = () => {
             setIsPinMode(false);
             setShowObservacionDialog(true);
           }}
-          onToggleEdge={() => {}}
+          onToggleEdge={(id, index) => {
+            // Lógica para marcar lados individuales
+            if (selectedTerritorio) {
+              const currentLados = selectedTerritorio.lados_completados || [];
+              const newLados = currentLados.includes(index)
+                ? currentLados.filter(i => i !== index)
+                : [...currentLados, index];
+              
+              updateEstado.mutate({ 
+                id: selectedTerritorio.id, 
+                estado: selectedTerritorio.estado as TerritorioEstado,
+                lados_completados: newLados 
+              });
+            }
+          }}
           onDeleteObservacion={deleteObservacion}
           isAdmin={isAdmin}
           isDrawingMode={isDrawingMode}
@@ -137,16 +158,20 @@ const Index = () => {
           Lista
         </Button>
 
-        {/* PANEL DE DETALLES - Z-60 para que tape el Header y el mapa */}
+        {/* PANEL DE DETALLES: Z-60 garantiza que tape el header y el mapa */}
         {selectedTerritorio && (
-          <div className="fixed inset-y-0 right-0 z-[60] w-full sm:w-80 shadow-2xl bg-white animate-in slide-in-from-right duration-300">
+          <div className="fixed inset-y-0 right-0 z-[60] w-full sm:w-80 shadow-2xl bg-white border-l animate-in slide-in-from-right duration-300">
             <TerritoryDetails
               territorio={selectedTerritorio}
               onClose={() => setSelectedTerritorio(null)}
               onChangeEstado={(estado) => {
-                updateEstado(selectedTerritorio.id, estado);
-                // Actualizamos el estado local para que el panel refleje el cambio
-                setSelectedTerritorio({...selectedTerritorio, estado: estado, status: estado});
+                // CORRECCIÓN: Pasar objeto al mutador
+                updateEstado.mutate({ 
+                  id: selectedTerritorio.id, 
+                  estado: estado 
+                });
+                // Actualización local para UI instantánea
+                setSelectedTerritorio({...selectedTerritorio, estado});
               }}
               onAddPin={() => setIsPinMode(true)}
               onToggleEdgeEdit={() => setIsEdgeEditMode(!isEdgeEditMode)}
@@ -175,7 +200,7 @@ const Index = () => {
         onOpenChange={setShowCreateDialog}
         onSubmit={handleCreateSubmit}
         geometria={pendingPolygon}
-        existingNumbers={territorios?.map(t => t.number || t.numero) || []}
+        existingNumbers={territorios?.map(t => t.numero) || []}
       />
 
       <ObservacionForm
