@@ -1,10 +1,11 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
-import type { Map, GeoJSON } from 'leaflet';
+import type { Map, GeoJSON, Layer, LatLng } from 'leaflet';
 
-// Fix icon issues with webpack
+// Fix icon issues
 import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css';
 import 'leaflet-defaulticon-compatibility';
 
@@ -13,50 +14,46 @@ interface TerritoryMapProps {
   selectedTerritorio: Territorio | null;
   onSelectTerritorio: (t: Territorio | null) => void;
   onUpdateStatus: (territoryId: number, newStatus: TerritorioEstado) => void;
-  isAdmin: boolean;
   isDrawingMode: boolean;
   onPolygonCreated: (geojson: any) => void;
 }
 
-// Module-level state for dynamically loaded library
+// Module-level state for Leaflet library
 let L: typeof import('leaflet') | null = null;
 
 const TerritoryMap: React.FC<TerritoryMapProps> = ({ 
-  territorios, selectedTerritorio, onSelectTerritorio, onUpdateStatus, isAdmin, isDrawingMode, onPolygonCreated 
+  territorios, selectedTerritorio, onSelectTerritorio, onUpdateStatus, isDrawingMode, onPolygonCreated 
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<Map | null>(null);
   const geoJsonLayer = useRef<GeoJSON | null>(null);
-  const drawHandler = useRef<any>(null); // For programmatic drawing
-  const [isMounted, setIsMounted] = useState(false);
+  const drawHandler = useRef<any>(null);
+  const [isLeafletLoaded, setLeafletLoaded] = useState(false);
 
+  // Dynamically load Leaflet and Leaflet-draw
   useEffect(() => {
-    setIsMounted(true);
     import('leaflet').then(leaflet => {
       L = leaflet;
-      import('leaflet-draw'); // Load for side-effects (attaches L.Draw)
-      // The component will re-render, and the next useEffect will initialize the map
+      import('leaflet-draw'); // Attaches L.Draw to the L object
+      setLeafletLoaded(true);
     }).catch(error => console.error("Failed to load Leaflet", error));
 
-    // Cleanup
     return () => {
       map.current?.remove();
-      map.current = null;
     };
   }, []);
 
-  // Initialize map once Leaflet is loaded and the component is mounted
+  // Initialize map once Leaflet is loaded
   useEffect(() => {
-    if (isMounted && L && mapContainer.current && !map.current) {
+    if (isLeafletLoaded && L && mapContainer.current && !map.current) {
       initializeMap();
     }
-  }, [isMounted, L]);
+  }, [isLeafletLoaded]);
 
   const initializeMap = () => {
     if (!L || !mapContainer.current) return;
 
-    // 1. FIX: Center map on Bernardo de Irigoyen
-    map.current = L.map(mapContainer.current).setView([-26.255, -53.645], 13);
+    map.current = L.map(mapContainer.current).setView([-26.255, -53.645], 13); // Centered on Bernardo de Irigoyen
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -64,16 +61,17 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
 
     geoJsonLayer.current = L.geoJSON().addTo(map.current);
 
-    // 2. FIX: Setup programmatic drawing handler instead of a toolbar
+    // Set up drawing handler to be controlled programmatically
     drawHandler.current = new (L as any).Draw.Polygon(map.current, {
         shapeOptions: { color: '#f97316' } 
     });
 
-    // Listen for when a polygon is created
+    // Event listener for when a polygon is created
     map.current.on((L as any).Draw.Event.CREATED, (e: any) => {
       const layer = e.layer;
-      const geojson = layer.toGeoJSON().geometry;
-      onPolygonCreated(geojson); // Pass geometry up to the parent component
+      onPolygonCreated(layer.toGeoJSON().geometry);
+      // The dialog will now open. We disable drawing to prevent multiple polygons.
+      drawHandler.current.disable();
     });
   };
 
@@ -85,66 +83,64 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
     }
   };
 
-  // Effect to update territories on the map
+  // Effect to update territories data on the map
   useEffect(() => {
-    if (!L || !geoJsonLayer.current || !map.current) return;
+    if (!L || !geoJsonLayer.current) return;
 
     geoJsonLayer.current.clearLayers();
     const features = territorios.map(t => ({
         type: 'Feature',
         geometry: t.geometria_poligono,
-        properties: { ...t, color: getColorForEstado(t.estado) },
+        properties: { ...t },
     }));
 
     geoJsonLayer.current.addData(features as any);
     geoJsonLayer.current.setStyle(feature => ({
-        color: feature?.properties.color,
+        color: getColorForEstado(feature?.properties.estado),
         weight: 2,
         opacity: 1,
-        fillOpacity: 0.3,
+        fillOpacity: 0.35,
     }));
 
     geoJsonLayer.current.on('click', (e: any) => {
+        if (isDrawingMode) return; // Don't select territories while drawing
         const territory = e.layer.feature.properties;
         onSelectTerritorio(territory);
         if (L) {
-            createTerritoryPopup(e.latlng, territory);
+          createTerritoryPopup(e.latlng, territory);
         }
     });
-  }, [territorios, L]);
+  }, [territorios, isLeafletLoaded]);
 
-  // 3. FIX: Correctly toggle drawing mode programmatically
+  // Effect to programmatically enable/disable drawing mode
   useEffect(() => {
-    if (!drawHandler.current || !L) return;
+    if (!drawHandler.current || !map.current) return;
     
     if (isDrawingMode) {
       drawHandler.current.enable();
     } else {
-      // This is safe to call even if not enabled
+      // This might be called before it's enabled, which is fine.
       drawHandler.current.disable();
     }
-  }, [isDrawingMode, L]);
+  }, [isDrawingMode]);
 
-  // Effect to handle selecting a territory
+  // Effect to zoom and show popup for the selected territory
   useEffect(() => {
     if (!selectedTerritorio || !map.current || !L || !geoJsonLayer.current) return;
 
-    const featureLayer = geoJsonLayer.current.getLayers().find(layer => {
-        return (layer as any).feature.properties.id === selectedTerritorio.id;
-    }) as any;
+    const featureLayer = geoJsonLayer.current.getLayers().find(layer => 
+      (layer as any).feature.properties.id === selectedTerritorio.id
+    ) as any;
 
     if (featureLayer) {
-        try {
-            const bounds = featureLayer.getBounds();
-            map.current.fitBounds(bounds, { padding: [50, 50] });
-            createTerritoryPopup(bounds.getCenter(), selectedTerritorio);
-        } catch(e) {
-            console.error("Error fitting bounds", e);
-        }
-    }
-  }, [selectedTerritorio, L]);
+        const bounds = featureLayer.getBounds();
+        map.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+        createTerritoryPopup(bounds.getCenter(), selectedTerritorio);
+    } 
 
-  const createTerritoryPopup = (latlng: any, territory: Territorio) => {
+  }, [selectedTerritorio]);
+
+  const createTerritoryPopup = (latlng: LatLng, territory: Territorio) => {
     if (!L || !map.current) return;
 
     const popupContent = `
@@ -161,26 +157,22 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
       </div>
     `;
 
-    const popup = L.popup({ closeButton: false, className: 'custom-popup' })
+    L.popup({ closeButton: false, minWidth: 200 })
       .setLatLng(latlng)
       .setContent(popupContent)
       .openOn(map.current);
 
     const select = document.getElementById(`status-select-${territory.id}`);
     if (select) {
-      select.addEventListener('change', (e) => {
+      select.onchange = (e) => {
         const newStatus = (e.target as HTMLSelectElement).value as TerritorioEstado;
         onUpdateStatus(territory.id, newStatus);
         map.current?.closePopup();
-      });
+      };
     }
   }
 
-  if (!isMounted) {
-    return <div className="w-full h-full bg-slate-900 flex items-center justify-center"><p>Cargando mapa...</p></div>;
-  }
-
-  return <div ref={mapContainer} className="w-full h-full" />;
+  return <div ref={mapContainer} className="w-full h-full bg-slate-900" />;
 };
 
 export default TerritoryMap;
