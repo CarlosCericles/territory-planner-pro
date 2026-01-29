@@ -4,7 +4,7 @@ import { TerritoryMap } from "@/components/map/TerritoryMap";
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Menu, LogOut, Loader2 } from "lucide-react";
+import { Menu, LogOut, Users, Plus, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
 const Index = () => {
@@ -15,70 +15,96 @@ const Index = () => {
   const [observaciones, setObservaciones] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Cargar datos de Supabase
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data: terrs, error: terrError } = await supabase
-          .from('territorios')
-          .select('*');
-        
-        const { data: obss, error: obsError } = await supabase
-          .from('observaciones')
-          .select('*');
+  // Estados para herramientas (lo que falta)
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [isAddingPin, setIsAddingPin] = useState(false);
 
-        if (terrError) throw terrError;
-        if (obsError) throw obsError;
+  const fetchData = async () => {
+    try {
+      const { data: terrs } = await supabase.from('territorios').select('*');
+      const { data: obss } = await supabase.from('observaciones').select('*');
+      setTerritorios(terrs || []);
+      setObservaciones(obss || []);
+    } catch (error) {
+      toast.error("Error al sincronizar datos");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        setTerritorios(terrs || []);
-        setObservaciones(obss || []);
-      } catch (error) {
-        console.error("Error cargando datos:", error);
-        toast.error("Error al cargar los territorios");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="h-screen w-full flex items-center justify-center bg-slate-900 text-white">
-        <Loader2 className="animate-spin mr-2" /> Cargando datos...
-      </div>
-    );
-  }
+  useEffect(() => { fetchData(); }, []);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-900 relative">
-      <div className="absolute top-4 left-4 z-[1000] flex gap-2">
-        <Button variant="secondary" size="icon" onClick={() => setIsSidebarOpen(true)} className="bg-white">
-          <Menu className="h-5 w-5 text-slate-900" />
-        </Button>
-        <Button variant="destructive" size="icon" onClick={() => signOut()}>
-          <LogOut className="h-5 w-5" />
-        </Button>
-      </div>
+    <div className="flex h-screen w-full flex-col bg-slate-900 overflow-hidden">
+      {/* BARRA SUPERIOR NUEVA */}
+      <header className="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-4 z-[1001]">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)} className="text-white">
+            <Menu className="h-5 w-5" />
+          </Button>
+          <span className="font-bold text-white hidden sm:inline-block">Territory Planner</span>
+        </div>
 
-      <TerritorySidebar 
-        territorios={territorios}
-        observaciones={observaciones}
-        selectedTerritorio={selectedTerritorio}
-        onSelectTerritorio={setSelectedTerritorio}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <>
+              <Button 
+                variant={isDrawingMode ? "default" : "outline"} 
+                size="sm" 
+                onClick={() => { setIsDrawingMode(!isDrawingMode); setIsAddingPin(false); }}
+                className={isDrawingMode ? "bg-blue-600" : "text-white border-slate-700"}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Nuevo Polígono
+              </Button>
+              <Button 
+                variant={isAddingPin ? "default" : "outline"} 
+                size="sm" 
+                onClick={() => { setIsAddingPin(!isAddingPin); setIsDrawingMode(false); }}
+                className={isAddingPin ? "bg-orange-600" : "text-white border-slate-700"}
+              >
+                <MapPin className="h-4 w-4 mr-1" /> Añadir Nota
+              </Button>
+              <Button variant="outline" size="sm" className="text-white border-slate-700">
+                <Users className="h-4 w-4 mr-1" /> Personas
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" size="icon" onClick={() => signOut()} className="text-red-400">
+            <LogOut className="h-5 w-5" />
+          </Button>
+        </div>
+      </header>
 
-      <main className="flex-1 h-full w-full">
-        <TerritoryMap 
+      <div className="flex-1 relative">
+        <TerritorySidebar 
           territorios={territorios}
+          observaciones={observaciones}
           selectedTerritorio={selectedTerritorio}
           onSelectTerritorio={setSelectedTerritorio}
-          isAdmin={isAdmin}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
         />
-      </main>
+
+        <main className="h-full w-full">
+          <TerritoryMap 
+            territorios={territorios}
+            selectedTerritorio={selectedTerritorio}
+            onSelectTerritorio={setSelectedTerritorio}
+            isAdmin={isAdmin}
+            isDrawingMode={isDrawingMode}
+            isAddingPin={isAddingPin}
+            onPolygonCreated={async (geojson) => {
+               // Función para guardar el nuevo polígono
+               const { error } = await supabase.from('territorios').insert([{
+                 numero: territorios.length + 1,
+                 geometria_poligono: geojson,
+                 estado: 'disponible'
+               }]);
+               if (!error) { fetchData(); setIsDrawingMode(false); toast.success("Territorio creado"); }
+            }}
+          />
+        </main>
+      </div>
     </div>
   );
 };
