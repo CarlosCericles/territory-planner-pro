@@ -1,159 +1,179 @@
-import React, { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Polygon, useMap, ZoomControl, LayersControl, Marker } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { Territorio } from '@/types/territory';
+import React, { useRef, useEffect } from 'react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import MapboxDraw from '@mapbox/mapbox-gl-draw';
+import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import type { Territorio, TerritorioEstado } from '@/types/territory';
 
-// Coordenadas y límites para Bernardo de Irigoyen
-const BDI_CENTER: L.LatLngTuple = [-26.255, -53.645];
-const BDI_BOUNDS: L.LatLngBoundsLiteral = [
-  [-26.3, -53.7],
-  [-26.2, -53.6]
-];
-const MIN_ZOOM = 14;
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
-// Icon fix para Leaflet
-if (typeof window !== 'undefined') {
-  delete (L.Icon.Default.prototype as any)._getIconUrl;
-  L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
-    iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
-  });
+interface TerritoryMapProps {
+  territorios: Territorio[];
+  selectedTerritorio: Territorio | null;
+  onSelectTerritorio: (t: Territorio | null) => void;
+  onUpdateStatus: (territoryId: number, newStatus: TerritorioEstado) => void;
+  isAdmin: boolean;
+  isDrawingMode: boolean;
+  onPolygonCreated: (geojson: any) => void;
 }
 
-// Controles de Geoman para dibujar polígonos
-function GeomanControls({ isDrawingMode, onPolygonCreated }: any) {
-  const map = useMap();
+const TerritoryMap: React.FC<TerritoryMapProps> = ({ 
+  territorios, selectedTerritorio, onSelectTerritorio, onUpdateStatus, isAdmin, isDrawingMode, onPolygonCreated 
+}) => {
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const draw = useRef<MapboxDraw | null>(null);
+  const popup = useRef<mapboxgl.Popup | null>(null);
+
+  useEffect(() => {
+    if (map.current || !mapContainer.current) return;
+
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/satellite-streets-v12',
+      center: [-68.8458, -32.8895], // Mendoza, Argentina
+      zoom: 13,
+    });
+
+    draw.current = new MapboxDraw({
+      displayControlsDefault: false,
+      controls: { polygon: true, trash: true },
+      userProperties: true,
+    });
+
+    map.current.addControl(draw.current, 'top-left');
+    map.current.addControl(new mapboxgl.NavigationControl());
+
+    map.current.on('load', () => {
+      map.current!.addSource('territorios', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.current!.addLayer({
+        id: 'territorios-fill',
+        type: 'fill',
+        source: 'territorios',
+        paint: {
+          'fill-color': ['get', 'color'],
+          'fill-opacity': 0.3,
+        },
+      });
+      map.current!.addLayer({
+        id: 'territorios-outline',
+        type: 'line',
+        source: 'territorios',
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': 2,
+        },
+      });
+
+      updateMapData(territorios);
+    });
+
+    map.current.on('click', 'territorios-fill', (e: any) => {
+      if (!e.features || e.features.length === 0) return;
+      const feature = e.features[0];
+      const territoryId = feature.properties.id;
+      const territory = territorios.find(t => t.id === territoryId);
+      if (territory) {
+        createTerritoryPopup(e.lngLat, territory);
+        onSelectTerritorio(territory);
+      }
+    });
+
+    map.current.on('draw.create', (e) => {
+        if (e.features.length > 0) {
+            onPolygonCreated(e.features[0].geometry);
+            draw.current?.deleteAll();
+        }
+    });
+  }, []);
+
+  const getColorForEstado = (estado: TerritorioEstado) => {
+    switch (estado) {
+      case 'completado': return '#22c55e'; // green-500
+      case 'iniciado': return '#f97316'; // orange-500
+      default: return '#64748b'; // slate-500
+    }
+  };
+
+  const updateMapData = (data: Territorio[]) => {
+    if (!map.current || !map.current.getSource('territorios')) return;
+    const geojsonData = {
+      type: 'FeatureCollection',
+      features: data.map(t => ({
+        type: 'Feature',
+        geometry: t.geometria_poligono,
+        properties: { ...t, color: getColorForEstado(t.estado) },
+      })),
+    };
+    (map.current.getSource('territorios') as mapboxgl.GeoJSONSource).setData(geojsonData as any);
+  };
+
+  useEffect(() => {
+    updateMapData(territorios);
+  }, [territorios]);
+
+  useEffect(() => {
+    if (!draw.current) return;
+    if (isDrawingMode) {
+      draw.current.changeMode('draw_polygon');
+    } else {
+      draw.current.changeMode('simple_select');
+    }
+  }, [isDrawingMode]);
   
   useEffect(() => {
-    if (!map || typeof window === 'undefined') return;
-
-    const setupGeoman = async () => {
-      // @ts-ignore
-      await import('@geoman-io/leaflet-geoman-free');
-      // @ts-ignore
-      await import('@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css');
-
-      if (isDrawingMode) {
-        map.pm.enableDraw('Polygon', {
-          snappable: true,
-          templineStyle: { color: '#3b82f6' },
-        });
-
-        map.on('pm:create', (e: any) => {
-          onPolygonCreated(e.layer.toGeoJSON().geometry);
-          e.layer.remove();
-          map.pm.disableDraw();
-        });
-      } else {
-        map.pm.disableDraw();
+    if (selectedTerritorio && map.current) {
+      const feature = territorios.find(t => t.id === selectedTerritorio.id);
+      if (feature && feature.geometria_poligono) {
+        const coordinates = (feature.geometria_poligono as any).coordinates[0];
+        const bounds = new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]);
+        for (const coord of coordinates) {
+          bounds.extend(coord);
+        }
+        map.current.fitBounds(bounds, { padding: 100 });
+        createTerritoryPopup(bounds.getCenter(), selectedTerritorio);
       }
-    };
-
-    setupGeoman();
-
-    return () => {
-      if (map.pm) {
-        map.off('pm:create');
-        map.pm.disableDraw();
-      }
-    };
-  }, [map, isDrawingMode]);
-
-  return null;
-}
-
-// Componente principal del mapa
-const TerritoryMap = ({
-  territorios = [],
-  selectedTerritorio,
-  onSelectTerritorio,
-  isDrawingMode,
-  onPolygonCreated
-}: any) => {
-  const mapRef = useRef<L.Map | null>(null);
-
-  useEffect(() => {
-    if (selectedTerritorio && mapRef.current) {
-      const coords = selectedTerritorio.geometria_poligono.coordinates[0].map((c: any) => [c[1], c[0]]);
-      mapRef.current.fitBounds(L.latLngBounds(coords), { padding: [50, 50] });
+    } else {
+      popup.current?.remove();
     }
   }, [selectedTerritorio]);
 
-  return (
-    <div className="h-full w-full bg-slate-900 relative z-0">
-      <MapContainer
-        center={BDI_CENTER}
-        zoom={15}
-        minZoom={MIN_ZOOM}
-        maxBounds={BDI_BOUNDS}
-        style={{ height: "100%", width: "100%" }}
-        zoomControl={false}
-        whenReady={(mapInstance) => { mapRef.current = mapInstance.target; }}
-      >
-        <LayersControl position="topright">
-          <LayersControl.BaseLayer checked name="Mapa de Calles">
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-          </LayersControl.BaseLayer>
-          <LayersControl.BaseLayer name="Vista Satelital">
-            <TileLayer
-              attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            />
-          </LayersControl.BaseLayer>
-        </LayersControl>
-        
-        <ZoomControl position="bottomright" />
 
-        <GeomanControls isDrawingMode={isDrawingMode} onPolygonCreated={onPolygonCreated} />
+  const createTerritoryPopup = (lngLat: mapboxgl.LngLatLike, territory: Territorio) => {
+    popup.current?.remove();
 
-        {territorios?.map((t: Territorio) => {
-          if (!t.geometria_poligono?.coordinates?.[0]) return null;
-          
-          const positions = t.geometria_poligono.coordinates[0].map((c: any) => [c[1], c[0]]);
-          const isSelected = selectedTerritorio?.id === t.id;
-          
-          const bounds = L.latLngBounds(positions as [number, number][]);
-          const center = bounds.getCenter();
-          
-          const numberIcon = L.divIcon({
-            html: `<span class="text-black font-bold text-lg">${t.numero}</span>`,
-            className: 'leaflet-div-icon',
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
-          });
+    const popupContent = `
+      <div class="bg-slate-800 text-white rounded-lg p-1 max-w-xs w-full">
+        <h3 class="font-bold text-lg px-3 pt-2">Territorio ${territory.numero}</h3>
+        <p class="text-sm text-slate-400 px-3 mb-2">${territory.nombre || 'Sin nombre'}</p>
+        <div class="px-3 pb-2">
+            <select id="status-select-${territory.id}" class="w-full bg-slate-700 border-slate-600 rounded p-1.5 text-sm">
+                <option value="disponible" ${territory.estado === 'disponible' ? 'selected' : ''}>Disponible</option>
+                <option value="iniciado" ${territory.estado === 'iniciado' ? 'selected' : ''}>Iniciado</option>
+                <option value="completado" ${territory.estado === 'completado' ? 'selected' : ''}>Completado</option>
+            </select>
+        </div>
+      </div>
+    `;
 
-          return (
-            <React.Fragment key={t.id}>
-              <Polygon
-                positions={positions as [number, number][]}
-                pathOptions={{
-                  color: isSelected ? '#3b82f6' : '#64748b',
-                  weight: isSelected ? 4 : 2,
-                  fillOpacity: isSelected ? 0.6 : 0.4,
-                }}
-                eventHandlers={{
-                  click: (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    onSelectTerritorio(t);
-                  },
-                }}
-              />
-              <Marker
-                position={center}
-                icon={numberIcon}
-                interactive={false} // Para que no interfiera con el clic en el polígono
-              />
-            </React.Fragment>
-          );
-        })}
-      </MapContainer>
-    </div>
-  );
+    popup.current = new mapboxgl.Popup({ closeButton: false, className: 'custom-popup' })
+      .setLngLat(lngLat)
+      .setHTML(popupContent)
+      .addTo(map.current!)
+    
+    const select = document.getElementById(`status-select-${territory.id}`);
+    if (select) {
+      select.addEventListener('change', (e) => {
+        const newStatus = (e.target as HTMLSelectElement).value as TerritorioEstado;
+        onUpdateStatus(territory.id, newStatus);
+        popup.current?.remove();
+      });
+    }
+  }
+
+  return <div ref={mapContainer} className="w-full h-full" />;
 };
 
 export default TerritoryMap;

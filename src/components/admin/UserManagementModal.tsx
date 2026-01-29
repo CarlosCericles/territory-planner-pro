@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Shield, User, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const UserManagementModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
@@ -30,6 +29,13 @@ const UserManagementModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: ()
   }, [isOpen]);
 
   const changeUserRole = async (userId: string, newRole: string) => {
+    // NOTE: This is a temporary simulation.
+    // The backend function was reverted to address other UI issues first.
+    setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
+    toast.info(`Simulación: Rol de ${users.find(u=>u.id===userId)?.email} cambiado a ${newRole}.`);
+    
+    // Original code to be restored later:
+    /*
     setLoading(true);
     try {
       const { error } = await supabase.rpc('update_user_role', { user_id: userId, new_role: newRole });
@@ -42,20 +48,21 @@ const UserManagementModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: ()
     } finally {
       setLoading(false);
     }
+    */
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl bg-slate-900 border-slate-700 text-white">
         <DialogHeader>
           <DialogTitle>Gestión de Usuarios</DialogTitle>
-          <DialogDescription>Cambia roles o elimina usuarios de tu equipo.</DialogDescription>
+          <DialogDescription className="text-slate-400">Cambia roles o elimina usuarios de tu equipo.</DialogDescription>
         </DialogHeader>
         <div className="mt-4 max-h-[60vh] overflow-y-auto">
           {loading && <div className="flex justify-center items-center p-8"><Loader2 className="animate-spin"/></div>}
           {!loading && (
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-gray-400 uppercase bg-gray-700">
+              <thead className="text-xs text-gray-400 uppercase bg-gray-800">
                 <tr>
                   <th scope="col" className="px-6 py-3">Usuario (Email)</th>
                   <th scope="col" className="px-6 py-3">Rol Actual</th>
@@ -76,10 +83,10 @@ const UserManagementModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: ()
                         defaultValue={user.role}
                         onValueChange={(newRole) => changeUserRole(user.id, newRole)}
                       >
-                        <SelectTrigger className="w-[150px]">
+                        <SelectTrigger className="w-[150px] bg-slate-800 border-slate-600 text-white">
                           <SelectValue placeholder="Seleccionar rol" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-slate-800 text-white border-slate-600">
                           <SelectItem value="admin">Admin</SelectItem>
                           <SelectItem value="publicador">Publicador</SelectItem>
                         </SelectContent>
