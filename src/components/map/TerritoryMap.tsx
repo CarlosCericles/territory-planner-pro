@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Polygon, useMap, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Territorio } from '@/types/territory';
 
-// Corrección de iconos
+// Icon fix for Leaflet
 if (typeof window !== 'undefined') {
   delete (L.Icon.Default.prototype as any)._getIconUrl;
   L.Icon.Default.mergeOptions({
@@ -14,14 +14,13 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// Control de Geoman con carga segura
+// Geoman controls with safe loading
 function GeomanControls({ isDrawingMode, onPolygonCreated }: any) {
   const map = useMap();
   
   useEffect(() => {
     if (!map || typeof window === 'undefined') return;
 
-    // Importación dinámica para evitar el error de pantalla blanca
     const setupGeoman = async () => {
       // @ts-ignore
       await import('@geoman-io/leaflet-geoman-free');
@@ -57,7 +56,7 @@ function GeomanControls({ isDrawingMode, onPolygonCreated }: any) {
   return null;
 }
 
-export const TerritoryMap = ({
+const TerritoryMap = ({
   territorios = [],
   selectedTerritorio,
   onSelectTerritorio,
@@ -115,3 +114,5 @@ export const TerritoryMap = ({
     </div>
   );
 };
+
+export default TerritoryMap;

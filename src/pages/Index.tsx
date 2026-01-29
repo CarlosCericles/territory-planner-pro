@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { TerritorySidebar } from "@/components/layout/TerritorySidebar";
-import { TerritoryMap } from "@/components/map/TerritoryMap";
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,13 @@ const Index = () => {
   const [territorios, setTerritorios] = useState([]);
   const [observaciones, setObservaciones] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isAddingPin, setIsAddingPin] = useState(false);
+
+  const TerritoryMap = useMemo(() => dynamic(() => import('@/components/map/TerritoryMap'), { 
+    ssr: false,
+    loading: () => <div className="h-full w-full bg-slate-800 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-white"/></div>
+  }), []);
 
   const fetchData = async () => {
     try {
@@ -66,7 +70,7 @@ const Index = () => {
   return (
     <div className="flex h-screen w-full bg-slate-900 overflow-hidden relative">
       
-      {/* Grupo Izquierdo: Menú y Dibujo */}
+      {/* Left Group: Menu and Drawing */}
       <div className="absolute top-4 left-4 z-[1000] flex gap-2">
         <Button 
           variant="secondary" 
@@ -88,7 +92,7 @@ const Index = () => {
         )}
       </div>
 
-      {/* Grupo Derecho: Salir, Personas y Notas */}
+      {/* Right Group: Logout, People, and Notes */}
       <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
         <Button variant="destructive" size="icon" onClick={() => signOut()} className="shadow-xl">
           <LogOut className="h-5 w-5" />
