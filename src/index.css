@@ -205,3 +205,38 @@
 .leaflet-pm-toolbar .leaflet-pm-icon-marker {
   @apply bg-card;
 }
+/* --- CORRECCIONES VISUALES FORZADAS --- */
+
+/* 1. Clavar el menú superior arriba y encima del mapa */
+header {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  z-index: 10000 !important; /* Número muy alto para ganar al mapa */
+  background-color: white !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+/* 2. Empujar el mapa hacia abajo para que no quede detrás del menú */
+.leaflet-container {
+  z-index: 1 !important; /* El mapa al fondo */
+  margin-top: 60px !important; /* Espacio para el header */
+  height: calc(100vh - 60px) !important; /* Resto de la pantalla */
+}
+
+/* 3. El botón azul de "Territorios" (izq) y controles flotantes */
+.leaflet-bottom, .leaflet-top {
+  z-index: 500 !important; /* Encima del mapa, debajo de los paneles */
+}
+
+/* 4. IMPORTANTE: El Panel Lateral (Sheet) que no aparece */
+/* Esto fuerza a cualquier panel lateral a estar MUY encima */
+[data-state="open"], [role="dialog"], .sheet-content {
+  z-index: 20000 !important; /* Máxima prioridad */
+}
+
+/* 5. Asegurar que el botón "Nuevo" y otros sean clickeables */
+button {
+  pointer-events: auto !important;
+}
