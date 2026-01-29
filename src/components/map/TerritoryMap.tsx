@@ -1,11 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Polygon, useMap, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import '@geoman-io/leaflet-geoman-free';
-import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
 import { Territorio } from '@/types/territory';
 
+// Corrección de iconos
 if (typeof window !== 'undefined') {
   delete (L.Icon.Default.prototype as any)._getIconUrl;
   L.Icon.Default.mergeOptions({
@@ -15,22 +14,46 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// Control de Geoman con carga segura
 function GeomanControls({ isDrawingMode, onPolygonCreated }: any) {
   const map = useMap();
+  
   useEffect(() => {
-    if (!map) return;
-    if (isDrawingMode) {
-      map.pm.enableDraw('Polygon', { snappable: true, templineStyle: { color: '#3b82f6' } });
-      map.on('pm:create', (e: any) => {
-        onPolygonCreated(e.layer.toGeoJSON().geometry);
-        e.layer.remove();
+    if (!map || typeof window === 'undefined') return;
+
+    // Importación dinámica para evitar el error de pantalla blanca
+    const setupGeoman = async () => {
+      // @ts-ignore
+      await import('@geoman-io/leaflet-geoman-free');
+      // @ts-ignore
+      await import('@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css');
+
+      if (isDrawingMode) {
+        map.pm.enableDraw('Polygon', {
+          snappable: true,
+          templineStyle: { color: '#3b82f6' },
+        });
+
+        map.on('pm:create', (e: any) => {
+          onPolygonCreated(e.layer.toGeoJSON().geometry);
+          e.layer.remove();
+          map.pm.disableDraw();
+        });
+      } else {
         map.pm.disableDraw();
-      });
-    } else {
-      map.pm.disableDraw();
-    }
-    return () => { map.off('pm:create'); map.pm.disableDraw(); };
-  }, [map, isDrawingMode, onPolygonCreated]);
+      }
+    };
+
+    setupGeoman();
+
+    return () => {
+      if (map.pm) {
+        map.off('pm:create');
+        map.pm.disableDraw();
+      }
+    };
+  }, [map, isDrawingMode]);
+
   return null;
 }
 
@@ -56,19 +79,20 @@ export const TerritoryMap = ({
         center={[-26.25, -53.64]} 
         zoom={15}
         style={{ height: "100%", width: "100%" }}
-        zoomControl={false} // Desactivamos el de defecto para moverlo
+        zoomControl={false}
         whenReady={(mapInstance) => { mapRef.current = mapInstance.target; }}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         
-        {/* Movemos el Zoom abajo a la derecha para que no se tape */}
         <ZoomControl position="bottomright" />
 
         <GeomanControls isDrawingMode={isDrawingMode} onPolygonCreated={onPolygonCreated} />
 
         {territorios?.map((t: Territorio) => {
+          if (!t.geometria_poligono?.coordinates?.[0]) return null;
           const positions = t.geometria_poligono.coordinates[0].map((c: any) => [c[1], c[0]]);
           const isSelected = selectedTerritorio?.id === t.id;
+          
           return (
             <Polygon
               key={t.id}
@@ -78,7 +102,12 @@ export const TerritoryMap = ({
                 weight: isSelected ? 4 : 2,
                 fillOpacity: isSelected ? 0.6 : 0.4,
               }}
-              eventHandlers={{ click: (e) => { L.DomEvent.stopPropagation(e); onSelectTerritorio(t); } }}
+              eventHandlers={{
+                click: (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  onSelectTerritorio(t);
+                },
+              }}
             />
           );
         })}
