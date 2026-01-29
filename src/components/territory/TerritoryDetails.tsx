@@ -15,7 +15,7 @@ import {
   Calendar,
   Pencil,
 } from 'lucide-react';
-import { formatDistanceToNow, format } from 'date-fns';
+import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface TerritoryDetailsProps {
@@ -31,11 +31,11 @@ interface TerritoryDetailsProps {
   observacionesCount: number;
 }
 
-const estadoConfig: Record<string, { label: string; className: string }> = {
-  pendiente: { label: 'Pendiente', className: 'bg-territory-pending text-white' },
-  disponible: { label: 'Disponible', className: 'bg-gray-500 text-white' },
-  iniciado: { label: 'Iniciado', className: 'bg-territory-started text-white' },
-  completado: { label: 'Completado', className: 'bg-territory-completed text-white' },
+const estadoConfig: Record<TerritorioEstado, { label: string; className: string }> = {
+  pendiente: { label: 'Pendiente', className: 'bg-slate-500 text-white' },
+  disponible: { label: 'Disponible', className: 'bg-gray-400 text-white' },
+  iniciado: { label: 'Iniciado', className: 'bg-orange-500 text-white' },
+  completado: { label: 'Completado', className: 'bg-green-600 text-white' },
 };
 
 export function TerritoryDetails({
@@ -54,15 +54,16 @@ export function TerritoryDetails({
 
   if (!territorio) return null;
 
-  // Normalización para soportar ambos idiomas de DB
-  const estadoActual = (territorio.status || territorio.estado || 'disponible') as string;
-  const numero = territorio.number || territorio.numero || 'S/N';
-  const nombre = territorio.name || territorio.nombre;
-  const geo = territorio.boundary || territorio.geojson || territorio.geometria_poligono;
+  // Normalización definitiva usando los tipos de territory.ts
+  const estadoActual = territorio.estado || 'disponible';
+  const numero = territorio.numero || 'S/N';
+  const nombre = territorio.nombre;
+  const geo = territorio.geometria_poligono;
   const ladosCompletados = territorio.lados_completados || [];
   
+  // Cálculo de lados basado en coordenadas GeoJSON
   const totalLados = geo?.coordinates?.[0]?.length ? geo.coordinates[0].length - 1 : 0;
-  const config = estadoConfig[estadoActual] || estadoConfig['disponible'];
+  const config = estadoConfig[estadoActual as TerritorioEstado] || estadoConfig['disponible'];
 
   return (
     <div className="flex h-full flex-col bg-card shadow-2xl border-l animate-in slide-in-from-right duration-300">
@@ -105,27 +106,27 @@ export function TerritoryDetails({
 
         <div className="mb-4">
           <p className="mb-1 text-sm font-medium text-muted-foreground">Observaciones</p>
-          <p className="text-sm">{observacionesCount} pines registrados</p>
+          <p className="text-sm font-semibold text-primary">{observacionesCount} notas en el mapa</p>
         </div>
 
         <Separator className="my-4" />
 
         <div className="mb-4">
           <p className="mb-3 text-sm font-medium">Cambiar estado</p>
-          <div className="flex flex-wrap gap-2">
-            {estadoActual !== 'pendiente' && estadoActual !== 'disponible' && (
-              <Button variant="outline" size="sm" onClick={() => onChangeEstado('pendiente' as TerritorioEstado)}>
+          <div className="grid grid-cols-2 gap-2">
+            {estadoActual !== 'pendiente' && (
+              <Button variant="outline" size="sm" onClick={() => onChangeEstado('pendiente')}>
                 <RotateCcw className="mr-2 h-4 w-4" /> Pendiente
               </Button>
             )}
             {estadoActual !== 'iniciado' && (
-              <Button variant="outline" size="sm" className="bg-orange-50 hover:bg-orange-100" onClick={() => onChangeEstado('iniciado' as TerritorioEstado)}>
-                <Play className="mr-2 h-4 w-4" /> Iniciado
+              <Button variant="outline" size="sm" className="bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200" onClick={() => onChangeEstado('iniciado')}>
+                <Play className="mr-2 h-4 w-4" /> Iniciar
               </Button>
             )}
             {estadoActual !== 'completado' && (
-              <Button variant="outline" size="sm" className="bg-green-50 hover:bg-green-100" onClick={() => onChangeEstado('completado' as TerritorioEstado)}>
-                <CheckCircle2 className="mr-2 h-4 w-4" /> Completado
+              <Button variant="outline" size="sm" className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200" onClick={() => onChangeEstado('completado')}>
+                <CheckCircle2 className="mr-2 h-4 w-4" /> Completar
               </Button>
             )}
           </div>
@@ -134,19 +135,26 @@ export function TerritoryDetails({
         {estadoActual === 'iniciado' && (
           <>
             <Separator className="my-4" />
-            <div className="mb-4">
-              <p className="mb-2 text-sm font-medium">Progreso de lados</p>
-              <p className="text-sm text-muted-foreground mb-3">
-                {ladosCompletados.length} de {totalLados} lados completados
-              </p>
+            <div className="mb-4 space-y-3">
+              <div className="flex justify-between items-end">
+                <p className="text-sm font-medium">Progreso de calles</p>
+                <span className="text-xs font-bold text-primary">
+                  {ladosCompletados.length} / {totalLados}
+                </span>
+              </div>
               <Button
                 variant={isEdgeEditMode ? 'default' : 'outline'}
-                className="w-full"
+                className="w-full justify-start"
                 onClick={onToggleEdgeEdit}
               >
                 <Pencil className="mr-2 h-4 w-4" />
-                {isEdgeEditMode ? 'Terminar edición' : 'Marcar lados hechos'}
+                {isEdgeEditMode ? 'Guardar progreso' : 'Marcar calles recorridas'}
               </Button>
+              {isEdgeEditMode && (
+                <p className="text-[10px] text-blue-600 font-medium animate-pulse text-center">
+                  Toca los bordes del territorio en el mapa
+                </p>
+              )}
             </div>
           </>
         )}
@@ -155,11 +163,12 @@ export function TerritoryDetails({
 
         <Button
           variant={isAddingPin ? 'default' : 'outline'}
-          className="w-full"
+          className="w-full shadow-sm"
           onClick={onAddPin}
+          disabled={isEdgeEditMode}
         >
           <MapPin className="mr-2 h-4 w-4" />
-          {isAddingPin ? 'Toca el mapa para ubicar' : 'Agregar observación'}
+          {isAddingPin ? 'Esperando clic en mapa...' : 'Nueva observación'}
         </Button>
       </div>
 
@@ -171,7 +180,7 @@ export function TerritoryDetails({
               <Edit2 className="mr-2 h-4 w-4" /> Editar
             </Button>
             <Button variant="destructive" size="sm" className="flex-1" onClick={onDelete}>
-              <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+              <Trash2 className="mr-2 h-4 w-4" /> Borrar
             </Button>
           </div>
         </div>
