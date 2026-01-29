@@ -15,21 +15,22 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
-        {/* Este Toaster suele ser el de "Territorio actualizado" */}
-        <div className="fixed top-0 z-[11000] w-full pointer-events-none">
-           <Toaster />
-        </div>
-        
-        {/* Este Sonner es el de las instrucciones de observaciones */}
-        <Sonner position="top-center" expand={false} richColors />
-        
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
-            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+            <Route 
+              path="/" 
+              element={
+                <ProtectedRoute>
+                  <Index />
+                </ProtectedRoute>
+              } 
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
+        <Toaster />
+        <Sonner position="top-center" richColors />
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
