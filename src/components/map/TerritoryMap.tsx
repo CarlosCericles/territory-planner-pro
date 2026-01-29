@@ -1,12 +1,11 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
-import type { Map, GeoJSON, Layer } from 'leaflet';
+import type { Map, GeoJSON } from 'leaflet';
 
-// To fix icon issues with webpack
-import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css'; 
+// Fix icon issues with webpack
+import 'leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css';
 import 'leaflet-defaulticon-compatibility';
 
 interface TerritoryMapProps {
@@ -19,7 +18,7 @@ interface TerritoryMapProps {
   onPolygonCreated: (geojson: any) => void;
 }
 
-// We will load Leaflet and Leaflet-draw dynamically
+// Module-level state for dynamically loaded library
 let L: typeof import('leaflet') | null = null;
 
 const TerritoryMap: React.FC<TerritoryMapProps> = ({ 
@@ -28,72 +27,65 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<Map | null>(null);
   const geoJsonLayer = useRef<GeoJSON | null>(null);
-  const drawnItems = useRef<any>(null); // FeatureGroup for drawn items
+  const drawHandler = useRef<any>(null); // For programmatic drawing
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
-    // Dynamically import Leaflet
     import('leaflet').then(leaflet => {
       L = leaflet;
-      // Also import leaflet-draw
-      import('leaflet-draw');
-      // Trigger a re-render or initialization now that L is available
-      if(mapContainer.current) {
-        initializeMap();
-      }
+      import('leaflet-draw'); // Load for side-effects (attaches L.Draw)
+      // The component will re-render, and the next useEffect will initialize the map
     }).catch(error => console.error("Failed to load Leaflet", error));
 
+    // Cleanup
     return () => {
       map.current?.remove();
+      map.current = null;
     };
   }, []);
 
-  const initializeMap = () => {
-    if (!L || !mapContainer.current || map.current) return;
+  // Initialize map once Leaflet is loaded and the component is mounted
+  useEffect(() => {
+    if (isMounted && L && mapContainer.current && !map.current) {
+      initializeMap();
+    }
+  }, [isMounted, L]);
 
-    map.current = L.map(mapContainer.current).setView([-32.8895, -68.8458], 13);
+  const initializeMap = () => {
+    if (!L || !mapContainer.current) return;
+
+    // 1. FIX: Center map on Bernardo de Irigoyen
+    map.current = L.map(mapContainer.current).setView([-26.255, -53.645], 13);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map.current);
 
-    // Layer for existing territories
     geoJsonLayer.current = L.geoJSON().addTo(map.current);
 
-    // Layer for drawing
-    drawnItems.current = new L.FeatureGroup();
-    map.current.addLayer(drawnItems.current);
-
-    // Drawing controls
-    const drawControl = new (L.Control as any).Draw({
-      edit: { featureGroup: drawnItems.current, edit: false, remove: false },
-      draw: {
-        polygon: { shapeOptions: { color: '#f97316' } },
-        polyline: false,
-        rectangle: false,
-        circle: false,
-        marker: false,
-        circlemarker: false,
-      }
+    // 2. FIX: Setup programmatic drawing handler instead of a toolbar
+    drawHandler.current = new (L as any).Draw.Polygon(map.current, {
+        shapeOptions: { color: '#f97316' } 
     });
-    map.current.addControl(drawControl);
 
-    map.current.on('draw:created', (e: any) => {
+    // Listen for when a polygon is created
+    map.current.on((L as any).Draw.Event.CREATED, (e: any) => {
       const layer = e.layer;
       const geojson = layer.toGeoJSON().geometry;
-      onPolygonCreated(geojson);
+      onPolygonCreated(geojson); // Pass geometry up to the parent component
     });
-  }
+  };
 
   const getColorForEstado = (estado: TerritorioEstado) => {
     switch (estado) {
-      case 'completado': return '#22c55e'; // green-500
-      case 'iniciado': return '#f97316'; // orange-500
-      default: return '#64748b'; // slate-500
+      case 'completado': return '#22c55e';
+      case 'iniciado': return '#f97316';
+      default: return '#64748b';
     }
   };
 
+  // Effect to update territories on the map
   useEffect(() => {
     if (!L || !geoJsonLayer.current || !map.current) return;
 
@@ -119,21 +111,21 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
             createTerritoryPopup(e.latlng, territory);
         }
     });
-  }, [territorios, L]); // Depend on L to ensure it's loaded
+  }, [territorios, L]);
 
+  // 3. FIX: Correctly toggle drawing mode programmatically
   useEffect(() => {
-    if (!map.current || !L) return;
+    if (!drawHandler.current || !L) return;
     
-    // Toggle drawing mode
-    const drawHandler = (L.draw as any).polygon(map.current);
     if (isDrawingMode) {
-        drawHandler.enable();
+      drawHandler.current.enable();
     } else {
-        drawHandler.disable();
+      // This is safe to call even if not enabled
+      drawHandler.current.disable();
     }
-
   }, [isDrawingMode, L]);
 
+  // Effect to handle selecting a territory
   useEffect(() => {
     if (!selectedTerritorio || !map.current || !L || !geoJsonLayer.current) return;
 
@@ -142,18 +134,21 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
     }) as any;
 
     if (featureLayer) {
-        const bounds = featureLayer.getBounds();
-        map.current.fitBounds(bounds, { padding: [50, 50] });
-        createTerritoryPopup(bounds.getCenter(), selectedTerritorio);
-    } 
-
+        try {
+            const bounds = featureLayer.getBounds();
+            map.current.fitBounds(bounds, { padding: [50, 50] });
+            createTerritoryPopup(bounds.getCenter(), selectedTerritorio);
+        } catch(e) {
+            console.error("Error fitting bounds", e);
+        }
+    }
   }, [selectedTerritorio, L]);
 
   const createTerritoryPopup = (latlng: any, territory: Territorio) => {
     if (!L || !map.current) return;
 
     const popupContent = `
-      <div class="bg-slate-800 text-white rounded-lg p-1 max-w-xs w-full">
+      <div class="bg-slate-800 text-white rounded-lg p-1 max-w-xs w-full shadow-lg">
         <h3 class="font-bold text-lg px-3 pt-2">Territorio ${territory.numero}</h3>
         <p class="text-sm text-slate-400 px-3 mb-2">${territory.nombre || 'Sin nombre'}</p>
         <div class="px-3 pb-2">
@@ -171,7 +166,6 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
       .setContent(popupContent)
       .openOn(map.current);
 
-    // The popup content is not part of the React DOM, so we need to add the event listener manually.
     const select = document.getElementById(`status-select-${territory.id}`);
     if (select) {
       select.addEventListener('change', (e) => {
@@ -183,7 +177,7 @@ const TerritoryMap: React.FC<TerritoryMapProps> = ({
   }
 
   if (!isMounted) {
-    return <div className="w-full h-full bg-slate-900 flex items-center justify-center"><p>Loading map...</p></div>;
+    return <div className="w-full h-full bg-slate-900 flex items-center justify-center"><p>Cargando mapa...</p></div>;
   }
 
   return <div ref={mapContainer} className="w-full h-full" />;
