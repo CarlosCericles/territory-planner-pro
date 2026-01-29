@@ -15,11 +15,12 @@ import { Button } from '@/components/ui/button';
 import type { Territorio, TerritorioEstado } from '@/types/territory';
 import type { Polygon } from 'geojson';
 import { MapPin, List, Plus, Loader2, Users } from 'lucide-react';
+import { toast } from "sonner";
 
 const Index = () => {
   const navigate = useNavigate();
   const { user, isLoading: authLoading, isAdmin } = useAuth();
-  const { territorios, isLoading: territoriosLoading, createTerritorio, updateEstado } = useTerritorios();
+  const { territorios, isLoading: territoriosLoading, createTerritorio, updateEstado, refreshTerritorios } = useTerritorios();
   
   const [selectedTerritorio, setSelectedTerritorio] = useState<Territorio | null>(null);
   const { observaciones, createObservacion, deleteObservacion } = useObservaciones(selectedTerritorio?.id);
@@ -41,8 +42,23 @@ const Index = () => {
     }
   }, [authLoading, user, navigate]);
 
-  // CORRECCIÓN: Si hay usuario pero authLoading es true (cargando rol), 
-  // dejamos pasar para evitar el bloqueo infinito.
+  const handleCreateSubmit = async (data: any) => {
+    try {
+      await createTerritorio({
+        ...data,
+        geojson: pendingPolygon,
+        status: 'disponible'
+      });
+      setShowCreateDialog(false);
+      setPendingPolygon(null);
+      toast.success("Territorio creado con éxito");
+      if (refreshTerritorios) refreshTerritorios();
+    } catch (error) {
+      console.error("Error al crear:", error);
+      toast.error("Error al guardar el territorio");
+    }
+  };
+
   if (authLoading && !user) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
@@ -55,13 +71,12 @@ const Index = () => {
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      <header className="z-10 flex h-14 items-center justify-between border-b bg-card px-4">
+      <header className="z-50 flex h-14 items-center justify-between border-b bg-card px-4 sticky top-0">
         <div className="flex items-center gap-2">
           <MapPin className="h-5 w-5 text-primary" />
           <h1 className="text-lg font-semibold">Territorios</h1>
         </div>
         <div className="flex items-center gap-2">
-          {/* El botón aparecerá en cuanto isAdmin sea true */}
           {isAdmin && (
             <>
               <Button
@@ -87,43 +102,55 @@ const Index = () => {
         </div>
       </header>
 
-      <div className="relative flex-1">
+      <div className="relative flex-1 overflow-hidden">
         <TerritoryMap
           territorios={territorios || []}
-          observaciones={observaciones || []}
+          observaciones={allObservaciones || []}
           selectedTerritorio={selectedTerritorio}
           onSelectTerritorio={setSelectedTerritorio}
-          onPolygonCreated={(geojson) => {
+          onPolygonCreated={(geojson: Polygon) => {
             setPendingPolygon(geojson);
             setIsDrawingMode(false);
             setShowCreateDialog(true);
           }}
-          onAddObservacion={(coords) => {
+          onAddObservacion={(coords: {lat: number, lng: number}) => {
             setPendingPinCoords(coords);
             setIsPinMode(false);
             setShowObservacionDialog(true);
           }}
           onToggleEdge={() => {}}
-          onDeleteObservacion={() => {}}
+          onDeleteObservacion={deleteObservacion}
           isAdmin={isAdmin}
           isDrawingMode={isDrawingMode}
           isAddingPin={isPinMode}
           isEdgeEditMode={isEdgeEditMode}
         />
 
+        {/* BOTÓN LISTA (Izquierda) */}
         <Button 
-          className="absolute bottom-4 left-4 z-[50] shadow-xl" 
+          className="absolute bottom-6 left-6 z-[40] shadow-2xl rounded-full px-6" 
           onClick={() => setShowSidebar(true)}
         >
           <List className="mr-2 h-5 w-5" />
-          Territorios
+          Lista
         </Button>
+
+        {/* PANEL DE DETALLES (Derecha) - ¡ESTO ES LO QUE FALTABA! */}
+        <TerritoryDetails
+          territorio={selectedTerritorio}
+          onClose={() => setSelectedTerritorio(null)}
+          onUpdateEstado={updateEstado}
+          isAdmin={isAdmin}
+        />
 
         <TerritorySidebar
           territorios={territorios || []}
           observaciones={allObservaciones || []}
           selectedTerritorio={selectedTerritorio}
-          onSelectTerritorio={setSelectedTerritorio}
+          onSelectTerritorio={(t) => {
+            setSelectedTerritorio(t);
+            setShowSidebar(false);
+          }}
           isOpen={showSidebar}
           onClose={() => setShowSidebar(false)}
         />
@@ -132,9 +159,9 @@ const Index = () => {
       <CreateTerritorioForm
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
-        onSubmit={async () => {}}
+        onSubmit={handleCreateSubmit}
         geometria={pendingPolygon}
-        existingNumbers={[]}
+        existingNumbers={territorios?.map(t => t.number) || []}
       />
 
       <UserManagementModal 
