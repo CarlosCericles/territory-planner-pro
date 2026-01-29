@@ -19,7 +19,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface TerritoryDetailsProps {
-  territorio: Territorio;
+  territorio: Territorio | null; // Permitimos null para evitar el crash
   onClose: () => void;
   onChangeEstado: (estado: TerritorioEstado) => void;
   onAddPin: () => void;
@@ -31,19 +31,11 @@ interface TerritoryDetailsProps {
   observacionesCount: number;
 }
 
-const estadoConfig: Record<TerritorioEstado, { label: string; className: string }> = {
-  pendiente: {
-    label: 'Pendiente',
-    className: 'bg-territory-pending text-white',
-  },
-  iniciado: {
-    label: 'Iniciado',
-    className: 'bg-territory-started text-white',
-  },
-  completado: {
-    label: 'Completado',
-    className: 'bg-territory-completed text-white',
-  },
+const estadoConfig: Record<string, { label: string; className: string }> = {
+  pendiente: { label: 'Pendiente', className: 'bg-territory-pending text-white' },
+  disponible: { label: 'Disponible', className: 'bg-gray-500 text-white' }, // Fallback para nuevo esquema
+  iniciado: { label: 'Iniciado', className: 'bg-territory-started text-white' },
+  completado: { label: 'Completado', className: 'bg-territory-completed text-white' },
 };
 
 export function TerritoryDetails({
@@ -59,25 +51,32 @@ export function TerritoryDetails({
   observacionesCount,
 }: TerritoryDetailsProps) {
   const { isAdmin } = useAuth();
-  const config = estadoConfig[territorio.estado];
+
+  // 1. SALVAGUARDA TOTAL: Si no hay territorio, no renderizamos nada.
+  if (!territorio) return null;
+
+  // 2. NORMALIZACIÓN DE DATOS (Inglés/Español)
+  const estadoActual = (territorio.status || territorio.estado || 'disponible') as string;
+  const numero = territorio.number || territorio.numero || 'S/N';
+  const nombre = territorio.name || territorio.nombre;
+  const geo = territorio.boundary || territorio.geojson || territorio.geometria_poligono;
   const ladosCompletados = territorio.lados_completados || [];
-  const totalLados = territorio.geometria_poligono.coordinates[0].length - 1;
+  
+  // Calculamos total de lados de forma segura
+  const totalLados = geo?.coordinates?.[0]?.length ? geo.coordinates[0].length - 1 : 0;
+  const config = estadoConfig[estadoActual] || estadoConfig['disponible'];
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-card shadow-2xl border-l animate-in slide-in-from-right duration-300">
       {/* Header */}
       <div className="flex items-center justify-between border-b p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-xl font-bold text-primary-foreground">
-            {territorio.numero}
+            {numero}
           </div>
           <div>
-            <h2 className="text-lg font-semibold">
-              Territorio {territorio.numero}
-            </h2>
-            {territorio.nombre && (
-              <p className="text-sm text-muted-foreground">{territorio.nombre}</p>
-            )}
+            <h2 className="text-lg font-semibold">Territorio {numero}</h2>
+            {nombre && <p className="text-sm text-muted-foreground">{nombre}</p>}
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose}>
@@ -87,7 +86,6 @@ export function TerritoryDetails({
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4">
-        {/* Estado */}
         <div className="mb-4">
           <p className="mb-2 text-sm font-medium text-muted-foreground">Estado actual</p>
           <Badge className={config.className} variant="secondary">
@@ -95,7 +93,6 @@ export function TerritoryDetails({
           </Badge>
         </div>
 
-        {/* Última fecha completado */}
         {territorio.ultima_fecha_completado && (
           <div className="mb-4">
             <p className="mb-1 text-sm font-medium text-muted-foreground">Última vez completado</p>
@@ -104,17 +101,10 @@ export function TerritoryDetails({
               <span>
                 {format(new Date(territorio.ultima_fecha_completado), "d 'de' MMMM, yyyy", { locale: es })}
               </span>
-              <span className="text-muted-foreground">
-                ({formatDistanceToNow(new Date(territorio.ultima_fecha_completado), {
-                  addSuffix: true,
-                  locale: es,
-                })})
-              </span>
             </div>
           </div>
         )}
 
-        {/* Observaciones */}
         <div className="mb-4">
           <p className="mb-1 text-sm font-medium text-muted-foreground">Observaciones</p>
           <p className="text-sm">{observacionesCount} pines registrados</p>
@@ -122,48 +112,28 @@ export function TerritoryDetails({
 
         <Separator className="my-4" />
 
-        {/* Cambiar estado */}
         <div className="mb-4">
           <p className="mb-3 text-sm font-medium">Cambiar estado</p>
           <div className="flex flex-wrap gap-2">
-            {territorio.estado !== 'pendiente' && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="touch-btn"
-                onClick={() => onChangeEstado('pendiente')}
-              >
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Pendiente
+            {estadoActual !== 'pendiente' && estadoActual !== 'disponible' && (
+              <Button variant="outline" size="sm" onClick={() => onChangeEstado('pendiente' as TerritorioEstado)}>
+                <RotateCcw className="mr-2 h-4 w-4" /> Pendiente
               </Button>
             )}
-            {territorio.estado !== 'iniciado' && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="touch-btn bg-territory-started/10 hover:bg-territory-started/20"
-                onClick={() => onChangeEstado('iniciado')}
-              >
-                <Play className="mr-2 h-4 w-4" />
-                Iniciado
+            {estadoActual !== 'iniciado' && (
+              <Button variant="outline" size="sm" className="bg-orange-50" onClick={() => onChangeEstado('iniciado' as TerritorioEstado)}>
+                <Play className="mr-2 h-4 w-4" /> Iniciado
               </Button>
             )}
-            {territorio.estado !== 'completado' && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="touch-btn bg-territory-completed/10 hover:bg-territory-completed/20"
-                onClick={() => onChangeEstado('completado')}
-              >
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Completado
+            {estadoActual !== 'completado' && (
+              <Button variant="outline" size="sm" className="bg-green-50" onClick={() => onChangeEstado('completado' as TerritorioEstado)}>
+                <CheckCircle2 className="mr-2 h-4 w-4" /> Completado
               </Button>
             )}
           </div>
         </div>
 
-        {/* Marcar lados - solo visible cuando está en estado "iniciado" */}
-        {territorio.estado === 'iniciado' && (
+        {estadoActual === 'iniciado' && (
           <>
             <Separator className="my-4" />
             <div className="mb-4">
@@ -173,48 +143,8 @@ export function TerritoryDetails({
               </p>
               <Button
                 variant={isEdgeEditMode ? 'default' : 'outline'}
-                className="w-full touch-btn"
+                className="w-full"
                 onClick={onToggleEdgeEdit}
               >
                 <Pencil className="mr-2 h-4 w-4" />
-                {isEdgeEditMode ? 'Terminar edición de lados' : 'Marcar lados hechos'}
-              </Button>
-            </div>
-          </>
-        )}
-
-        <Separator className="my-4" />
-
-        {/* Agregar observación */}
-        <Button
-          variant={isAddingPin ? 'default' : 'outline'}
-          className="w-full touch-btn"
-          onClick={onAddPin}
-        >
-          <MapPin className="mr-2 h-4 w-4" />
-          {isAddingPin ? 'Toca en el mapa para agregar pin' : 'Agregar observación'}
-        </Button>
-      </div>
-
-      {/* Admin actions */}
-      {isAdmin && (
-        <div className="border-t p-4">
-          <div className="flex gap-2">
-            {onEdit && (
-              <Button variant="outline" size="sm" className="flex-1" onClick={onEdit}>
-                <Edit2 className="mr-2 h-4 w-4" />
-                Editar
-              </Button>
-            )}
-            {onDelete && (
-              <Button variant="destructive" size="sm" className="flex-1" onClick={onDelete}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                Eliminar
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+                {isEdgeEditMode ? 'Terminar edición' :
