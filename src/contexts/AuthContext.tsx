@@ -33,19 +33,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       
       const role = (data?.role as AppRole) || 'publicador';
-      console.log("Rol detectado:", role);
       setUserRole(role);
     } catch (err) {
-      console.error('Error fetching role:', err);
-      setUserRole('publicador');
-    } finally {
-      // Liberamos el estado de carga una vez intentamos obtener el rol
-      setIsLoading(false);
+      console.error('Error al obtener el rol:', err);
+      setUserRole('publicador'); // Fallback de seguridad
     }
   };
 
   useEffect(() => {
-    // 1. Verificar sesión inicial
+    // 1. Inicialización de sesión
     const initAuth = async () => {
       try {
         const { data: { session: initSession } } = await supabase.auth.getSession();
@@ -54,28 +50,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (initSession?.user) {
           await fetchUserRole(initSession.user.id);
-        } else {
-          setIsLoading(false);
         }
       } catch (e) {
         console.error("Auth init error:", e);
+      } finally {
         setIsLoading(false);
       }
     };
 
     initAuth();
 
-    // 2. Escuchar cambios de estado (Login/Logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, curSession) => {
-      setSession(curSession);
-      setUser(curSession?.user ?? null);
+    // 2. Listener de cambios de autenticación
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      setSession(currentSession);
+      const currentUser = currentSession?.user ?? null;
+      setUser(currentUser);
       
-      if (curSession?.user) {
-        fetchUserRole(curSession.user.id);
+      if (currentUser) {
+        await fetchUserRole(currentUser.id);
       } else {
         setUserRole(null);
-        setIsLoading(false);
       }
+      setIsLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -87,7 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userRole,
     isAdmin: userRole === 'admin',
     isLoading,
-    signIn: (email: string, pass: string) => supabase.auth.signInWithPassword({ email, password: pass }),
+    signIn: (email: string, pass: string) => 
+      supabase.auth.signInWithPassword({ email, password: pass }),
     signUp: (email: string, pass: string, name: string) => 
       supabase.auth.signUp({ 
         email, 
@@ -102,11 +99,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {!isLoading && children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  if (!context) throw new Error('useAuth debe usarse dentro de un AuthProvider');
   return context;
 };
