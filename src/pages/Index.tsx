@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Menu, LogOut, Users, Plus, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import NewTerritoryDialog from '@/components/map/NewTerritoryDialog';
 
 const TerritoryMap = lazy(() => import('@/components/map/TerritoryMap'));
 
@@ -17,6 +18,9 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isAddingPin, setIsAddingPin] = useState(false);
+  
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newPolygon, setNewPolygon] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -40,25 +44,31 @@ const Index = () => {
     fetchData();
   }, []);
 
-  const handleCreatePolygon = async (geojson: any) => {
-    try {
-      const nextNumber = territorios.length > 0 
-        ? Math.max(...territorios.map((t: any) => t.numero || 0)) + 1 
-        : 1;
+  const handlePolygonDrawn = (geojson: any) => {
+    setNewPolygon(geojson);
+    setIsDialogOpen(true);
+    setIsDrawingMode(false);
+  };
 
+  const handleSaveTerritory = async ({ numero, nombre }: any) => {
+    if (!newPolygon) return;
+    
+    try {
       const { error } = await supabase.from('territorios').insert([{
-        numero: nextNumber,
-        geometria_poligono: geojson,
+        numero,
+        nombre,
+        geometria_poligono: newPolygon,
         estado: 'disponible'
       }]);
 
       if (error) throw error;
       
-      toast.success(`Territorio ${nextNumber} guardado`);
-      fetchData(); // Refrescar datos
-      setIsDrawingMode(false);
-    } catch (error) {
-      toast.error("Error al guardar polígono");
+      toast.success(`Territorio ${numero} guardado correctamente`);
+      fetchData(); // Refrescar
+      setIsDialogOpen(false);
+      setNewPolygon(null);
+    } catch (error: any) {
+      toast.error("Error al guardar el territorio: " + error.message);
     }
   };
 
@@ -83,16 +93,15 @@ const Index = () => {
         
         {isAdmin && (
           <Button 
+            size="icon"
             onClick={() => { setIsDrawingMode(!isDrawingMode); setIsAddingPin(false); }}
             className={`${isDrawingMode ? "bg-blue-600 text-white" : "bg-white text-slate-900"} shadow-xl border-none hover:opacity-90`}
           >
-            <Plus className="h-5 w-5 mr-2" />
-            <span>Nuevo Polígono</span>
+            <Plus className="h-5 w-5" />
           </Button>
         )}
       </div>
 
-      {/* Right Group moved down to avoid overlap */}
       <div className="absolute top-24 right-4 z-[1000] flex flex-col gap-2">
         <Button variant="destructive" size="icon" onClick={signOut} className="shadow-xl">
           <LogOut className="h-5 w-5" />
@@ -122,6 +131,15 @@ const Index = () => {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
+      
+      <NewTerritoryDialog 
+        isOpen={isDialogOpen}
+        onSave={handleSaveTerritory}
+        onCancel={() => {
+          setIsDialogOpen(false);
+          setNewPolygon(null);
+        }}
+      />
 
       <main className="flex-1 h-full w-full relative z-0">
         <Suspense fallback={<div className="h-full w-full bg-slate-800 flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-white"/></div>}>
@@ -132,7 +150,7 @@ const Index = () => {
             isAdmin={isAdmin}
             isDrawingMode={isDrawingMode}
             isAddingPin={isAddingPin}
-            onPolygonCreated={handleCreatePolygon}
+            onPolygonCreated={handlePolygonDrawn} // Cambiado a handlePolygonDrawn
           />
         </Suspense>
       </main>
