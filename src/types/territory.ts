@@ -1,6 +1,6 @@
 import type { Polygon } from 'geojson';
 
-export type TerritorioEstado = 'pendiente' | 'iniciado' | 'completado';
+export type TerritorioEstado = 'pendiente' | 'iniciado' | 'completado' | 'disponible';
 
 export interface Territorio {
   id: string;
@@ -13,6 +13,10 @@ export interface Territorio {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Campos opcionales para compatibilidad durante transiciones de datos
+  status?: string; 
+  name?: string;
+  number?: number;
 }
 
 export interface Observacion {
@@ -54,7 +58,7 @@ export interface UserRole {
   created_at: string;
 }
 
-// For offline sync
+// Para sincronización offline
 export interface PendingChange {
   id: string;
   type: 'create' | 'update' | 'delete';
