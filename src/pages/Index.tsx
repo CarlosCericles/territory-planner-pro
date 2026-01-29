@@ -15,137 +15,113 @@ const Index = () => {
   const [observaciones, setObservaciones] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Estados de herramientas
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isAddingPin, setIsAddingPin] = useState(false);
 
   const fetchData = async () => {
     try {
-      const { data: terrs, error: terrError } = await supabase.from('territorios').select('*');
-      const { data: obss, error: obsError } = await supabase.from('observaciones').select('*');
-      
-      if (terrError) throw terrError;
-      if (obsError) throw obsError;
-
+      const { data: terrs } = await supabase.from('territorios').select('*').order('numero', { ascending: true });
+      const { data: obss } = await supabase.from('observaciones').select('*');
       setTerritorios(terrs || []);
       setObservaciones(obss || []);
     } catch (error) {
-      console.error(error);
       toast.error("Error al sincronizar datos");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const handleCreatePolygon = async (geojson: any) => {
     try {
+      // Calculamos el siguiente número disponible
+      const nextNumber = territorios.length > 0 
+        ? Math.max(...territorios.map((t: any) => t.numero || 0)) + 1 
+        : 1;
+
       const { error } = await supabase.from('territorios').insert([{
-        numero: territorios.length + 1,
+        numero: nextNumber,
         geometria_poligono: geojson,
         estado: 'disponible'
       }]);
 
       if (error) throw error;
       
-      toast.success("Territorio creado");
+      toast.success(`Territorio ${nextNumber} creado con éxito`);
       fetchData();
       setIsDrawingMode(false);
     } catch (error) {
-      toast.error("Error al guardar");
+      toast.error("Error al guardar el territorio");
     }
   };
 
-  if (loading) {
-    return (
-      <div className="h-screen w-full flex items-center justify-center bg-slate-900 text-white font-sans">
-        <Loader2 className="animate-spin mr-2" /> Cargando sistema...
-      </div>
-    );
-  }
+  if (loading) return <div className="h-screen w-full flex items-center justify-center bg-slate-900 text-white"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="flex h-screen w-full flex-col bg-slate-900 overflow-hidden font-sans">
+    <div className="flex h-screen w-full bg-slate-900 overflow-hidden relative">
       
-      {/* BARRA SUPERIOR - COLORES SÓLIDOS Y VISIBLES */}
-      <header className="h-16 border-b border-slate-700 bg-slate-800 flex items-center justify-between px-4 z-[1001] shrink-0 shadow-xl">
-        <div className="flex items-center gap-3">
+      {/* BOTONES FLOTANTES SUPERIORES (Estilo anterior) */}
+      <div className="absolute top-4 left-4 z-[1000] flex gap-2">
+        <Button variant="secondary" size="icon" onClick={() => setIsSidebarOpen(true)} className="bg-white shadow-lg border-none hover:bg-slate-100">
+          <Menu className="h-5 w-5 text-slate-900" />
+        </Button>
+        
+        {isAdmin && (
           <Button 
-            variant="secondary" 
-            size="icon" 
-            onClick={() => setIsSidebarOpen(true)}
-            className="bg-slate-700 hover:bg-slate-600 text-white border-none"
+            variant={isDrawingMode ? "default" : "secondary"}
+            onClick={() => { setIsDrawingMode(!isDrawingMode); setIsAddingPin(false); }}
+            className={`${isDrawingMode ? "bg-blue-600" : "bg-white"} shadow-lg border-none text-slate-900`}
           >
-            <Menu className="h-5 w-5" />
+            <Plus className={`h-5 w-5 ${isDrawingMode ? "text-white" : "text-slate-900"} mr-2`} />
+            <span className={isDrawingMode ? "text-white" : "text-slate-900"}>Nuevo Polígono</span>
           </Button>
-          <span className="font-bold text-white text-lg tracking-tight">Territory Planner</span>
-        </div>
+        )}
+      </div>
 
-        <div className="flex items-center gap-2">
-          {isAdmin && (
-            <>
-              <Button 
-                onClick={() => { setIsDrawingMode(!isDrawingMode); setIsAddingPin(false); }}
-                className={`${isDrawingMode ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-700 hover:bg-slate-600"} text-white border-none font-medium shadow-sm`}
-              >
-                <Plus className="h-4 w-4 mr-2" /> Nuevo Polígono
-              </Button>
-              
-              <Button 
-                onClick={() => { setIsAddingPin(!isAddingPin); setIsDrawingMode(false); }}
-                className={`${isAddingPin ? "bg-amber-600 hover:bg-amber-700" : "bg-slate-700 hover:bg-slate-600"} text-white border-none font-medium shadow-sm`}
-              >
-                <MapPin className="h-4 w-4 mr-2" /> Añadir Nota
-              </Button>
+      {/* BOTONES LADO DERECHO (Añadir Nota y Personas) */}
+      <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+        <Button variant="destructive" size="icon" onClick={() => signOut()} className="shadow-lg">
+          <LogOut className="h-5 w-5" />
+        </Button>
+        
+        {isAdmin && (
+          <>
+            <Button variant="secondary" size="icon" className="bg-white shadow-lg text-slate-900">
+              <Users className="h-5 w-5" />
+            </Button>
+            <Button 
+              variant={isAddingPin ? "default" : "secondary"}
+              size="icon"
+              onClick={() => { setIsAddingPin(!isAddingPin); setIsDrawingMode(false); }}
+              className={`${isAddingPin ? "bg-orange-600" : "bg-white"} shadow-lg text-slate-900`}
+            >
+              <MapPin className={`h-5 w-5 ${isAddingPin ? "text-white" : ""}`} />
+            </Button>
+          </>
+        )}
+      </div>
 
-              <Button 
-                className="bg-slate-700 hover:bg-slate-600 text-white border-none font-medium shadow-sm"
-              >
-                <Users className="h-4 w-4 mr-2" /> Personas
-              </Button>
-            </>
-          )}
-          
-          <div className="h-8 w-[1px] bg-slate-700 mx-2" />
+      <TerritorySidebar 
+        territorios={territorios}
+        observaciones={observaciones}
+        selectedTerritorio={selectedTerritorio}
+        onSelectTerritorio={setSelectedTerritorio}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
 
-          <Button 
-            variant="destructive" 
-            size="icon" 
-            onClick={() => signOut()}
-            className="bg-red-600 hover:bg-red-700 shadow-md"
-          >
-            <LogOut className="h-5 w-5 text-white" />
-          </Button>
-        </div>
-      </header>
-
-      <div className="flex-1 relative flex overflow-hidden">
-        {/* SIDEBAR */}
-        <TerritorySidebar 
+      <main className="flex-1 h-full w-full relative z-0">
+        <TerritoryMap 
           territorios={territorios}
-          observaciones={observaciones}
           selectedTerritorio={selectedTerritorio}
           onSelectTerritorio={setSelectedTerritorio}
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
+          isAdmin={isAdmin}
+          isDrawingMode={isDrawingMode}
+          isAddingPin={isAddingPin}
+          onPolygonCreated={handleCreatePolygon}
         />
-
-        {/* MAPA */}
-        <main className="flex-1 h-full w-full relative z-0">
-          <TerritoryMap 
-            territorios={territorios}
-            selectedTerritorio={selectedTerritorio}
-            onSelectTerritorio={setSelectedTerritorio}
-            isAdmin={isAdmin}
-            isDrawingMode={isDrawingMode}
-            isAddingPin={isAddingPin}
-            onPolygonCreated={handleCreatePolygon}
-          />
-        </main>
-      </div>
+      </main>
     </div>
   );
 };
